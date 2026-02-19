@@ -3,11 +3,11 @@
 Inspired by [jq](https://jqlang.github.io/jq/), `confctl` brings the same idea of querying structured data to configuration files. Instead of JSON streams, it targets the files engineers actually use day-to-day — JSON, YAML, and TOML — with a simple dotted path syntax and no filter language to learn.
 
 ```bash
-confctl get club.yaml players.0.name
-# Vinicius Junior
+confctl config.yaml clubs.0.players.1.name
+# Juninho Pernambucano
 
-confctl print club.toml
-# { "club": { "name": "FC Barcelona", ... } }
+confctl config.toml
+# { "clubs": [ { "name": "Club de Regatas Vasco da Gama", ... } ] }
 ```
 
 ## Installation
@@ -83,58 +83,57 @@ Works with any base image (`debian`, `alpine`, `ubuntu`, `scratch`-based) — no
 ## Usage
 
 ```
-confctl get <file> <path>    Read a value by dotted path
-confctl print <file>         Print the whole file as normalized JSON
+confctl <file> [path]
 ```
 
-### `get` — Read a value
+- **With path** — extracts the value at the dotted path
+- **Without path** — prints the entire file as normalized JSON
 
-Use dot-separated keys to navigate nested structures. Use numeric indices to access array elements.
+### Extracting values
+
+Use dot-separated keys to navigate nested structures. Use numeric indices for arrays.
 
 ```bash
-confctl get club.json club.name
-# Arsenal FC
+confctl config.json clubs.0.name
+# Club de Regatas Vasco da Gama
 
-confctl get club.yaml players.0.name
-# Vinicius Junior
+confctl config.yaml clubs.0.players.1.name
+# Juninho Pernambucano
 
-confctl get club.toml titles.champions_league
-# 5
+confctl config.toml clubs.2.titles.champions_league
+# 15
 
-confctl get club.yaml players.1.position
-# midfielder
-
-confctl get club.yaml season
-# { "year": "2024-25", "league": "La Liga" }
+confctl config.yaml clubs.1.stadium
+# Emirates Stadium
 ```
 
-### `print` — Normalize to JSON
+### Printing the whole file
 
-Prints the entire file as formatted JSON — useful for exploring available keys before querying.
+Omit the path to dump the entire file as formatted JSON — useful for discovering available keys.
 
 ```bash
-confctl print club.toml
+confctl config.toml
 ```
 
 ```json
 {
-  "club": {
-    "name": "FC Barcelona",
-    "founded": 1899,
-    "stadium": "Spotify Camp Nou"
-  },
-  "players": [
-    { "name": "Lamine Yamal", "number": 19, "position": "winger" },
-    { "name": "Pedri", "number": 8, "position": "midfielder" }
-  ],
-  "titles": { "la_liga": 27, "champions_league": 5 }
+  "clubs": [
+    {
+      "name": "Club de Regatas Vasco da Gama",
+      "country": "Brazil",
+      "players": [
+        { "name": "Edmundo", "number": 9, "position": "striker" },
+        { "name": "Juninho Pernambucano", "number": 8, "position": "midfielder" }
+      ]
+    }
+  ]
 }
 ```
 
 ### Error handling
 
 ```bash
-confctl get club.json missing.key
+confctl config.json missing.key
 # Error: Key not found: 'missing' (at path 'missing')
 # exit code 1
 ```
@@ -178,5 +177,5 @@ mise run test              # run unit tests
 docker build -t confctl .
 
 docker run --rm -v $(pwd)/testdata:/data confctl \
-  get /data/club.yaml players.0.name
+  /data/config.yaml clubs.0.name
 ```

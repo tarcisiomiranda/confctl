@@ -2,7 +2,7 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::{anyhow, bail, Context, Result};
-use clap::{Parser, Subcommand};
+use clap::Parser;
 use serde_json::Value;
 
 #[derive(Parser)]
@@ -12,14 +12,8 @@ use serde_json::Value;
     about = "A simplified jq for configuration files (JSON, YAML, TOML)"
 )]
 struct Cli {
-    #[command(subcommand)]
-    command: Commands,
-}
-
-#[derive(Subcommand)]
-enum Commands {
-    Get { file: String, path: String },
-    Print { file: String },
+    file: String,
+    path: Option<String>,
 }
 
 enum Format {
@@ -120,14 +114,14 @@ fn format_value(value: &Value) -> String {
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    match cli.command {
-        Commands::Get { file, path } => {
-            let value = parse_file(&file)?;
+    let value = parse_file(&cli.file)?;
+
+    match cli.path {
+        Some(path) => {
             let result = resolve_path(&value, &path)?;
             println!("{}", format_value(result));
         }
-        Commands::Print { file } => {
-            let value = parse_file(&file)?;
+        None => {
             let pretty = serde_json::to_string_pretty(&value)
                 .context("Failed to serialize value to JSON")?;
             println!("{pretty}");
