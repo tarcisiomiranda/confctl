@@ -1,0 +1,92 @@
+{
+  "clubs": [
+    {
+      "name": "Club de Regatas Vasco da Gama",
+      "country": "Brazil",
+      "founded": 1898,
+      "stadium": "Estadio Sao Januario",
+      "players": [
+        {
+          "name": "Edmundo",
+          "number": 9,
+          "position": "striker"
+        },
+        {
+          "name": "Juninho Pernambucano",
+          "number": 8,
+          "position": "midfielder"
+        }
+      ],
+      "titles": {
+        "campeonato_brasileiro": 4,
+        "copa_libertadores": 1
+      }
+    },
+    {
+      "name": "Arsenal FC",
+      "country": "England",
+      "founded": 1886,
+      "stadium": "Emirates Stadium",
+      "players": [
+        {
+          "name": "Bukayo Saka",
+          "number": 7,
+          "position": "winger"
+        },
+        {
+          "name": "Martin Odegaard",
+          "number": 8,
+          "position": "midfielder"
+        }
+      ],
+      "titles": {
+        "premier_league": 13,
+        "fa_cup": 14
+      }
+    },
+    {
+      "name": "Real Madrid CF",
+      "country": "Spain",
+      "founded": 1902,
+      "stadium": "Santiago Bernabeu",
+      "players": [
+        {
+          "name": "Vinicius Junior",
+          "number": 7,
+          "position": "winger"
+        },
+        {
+          "name": "Jude Bellingham",
+          "number": 5,
+          "position": "midfielder"
+        }
+      ],
+      "titles": {
+        "la_liga": 36,
+        "champions_league": 15
+      }
+    },
+    {
+      "name": "FC Barcelona",
+      "country": "Spain",
+      "founded": 1899,
+      "stadium": "Spotify Camp Nou",
+      "players": [
+        {
+          "name": "Lamine Yamal",
+          "number": 19,
+          "position": "winger"
+        },
+        {
+          "name": "Pedri",
+          "number": 8,
+          "position": "midfielder"
+        }
+      ],
+      "titles": {
+        "la_liga": 27,
+        "champions_league": 5
+      }
+    }
+  ]
+}

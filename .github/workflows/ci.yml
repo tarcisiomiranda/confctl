@@ -1,0 +1,77 @@
+name: CI Pipeline
+
+permissions:
+  contents: read
+  actions: read
+
+on:
+  pull_request:
+    branches: ['main']
+  push:
+    branches: ['main']
+  workflow_dispatch: {}
+
+jobs:
+  ci:
+    name: CI - Test, Lint & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🦀 Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.91.1'
+          components: clippy, rustfmt
+
+      - name: 📦 Cache cargo registry & build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: 🔍 Check formatting
+        run: cargo fmt -- --check
+
+      - name: 🔎 Run clippy
+        run: cargo clippy -- -D warnings
+
+      - name: 🧪 Run tests
+        run: cargo test
+
+      - name: 🔨 Build release
+        run: cargo build --release
+
+      - name: 📦 Upload binary artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: confctl-binary
+          path: target/release/confctl
+          retention-days: 7
+
+      - name: ✅ CI Pipeline Summary
+        if: success()
+        run: |
+          echo "### ✅ CI Pipeline Passed!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- 📝 Format: Passed" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔎 Clippy: Passed" >> $GITHUB_STEP_SUMMARY
+          echo "- 🧪 Tests: Passed" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔨 Build: Passed" >> $GITHUB_STEP_SUMMARY
+
+      - name: ❌ CI Pipeline Failed
+        if: failure()
+        run: |
+          echo "### ❌ CI Pipeline Failed!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check the logs above for details." >> $GITHUB_STEP_SUMMARY

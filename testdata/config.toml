@@ -1,0 +1,79 @@
+[[clubs]]
+name = "Club de Regatas Vasco da Gama"
+country = "Brazil"
+founded = 1898
+stadium = "Estadio Sao Januario"
+
+[[clubs.players]]
+name = "Edmundo"
+number = 9
+position = "striker"
+
+[[clubs.players]]
+name = "Juninho Pernambucano"
+number = 8
+position = "midfielder"
+
+[clubs.titles]
+campeonato_brasileiro = 4
+copa_libertadores = 1
+
+[[clubs]]
+name = "Arsenal FC"
+country = "England"
+founded = 1886
+stadium = "Emirates Stadium"
+
+[[clubs.players]]
+name = "Bukayo Saka"
+number = 7
+position = "winger"
+
+[[clubs.players]]
+name = "Martin Odegaard"
+number = 8
+position = "midfielder"
+
+[clubs.titles]
+premier_league = 13
+fa_cup = 14
+
+[[clubs]]
+name = "Real Madrid CF"
+country = "Spain"
+founded = 1902
+stadium = "Santiago Bernabeu"
+
+[[clubs.players]]
+name = "Vinicius Junior"
+number = 7
+position = "winger"
+
+[[clubs.players]]
+name = "Jude Bellingham"
+number = 5
+position = "midfielder"
+
+[clubs.titles]
+la_liga = 36
+champions_league = 15
+
+[[clubs]]
+name = "FC Barcelona"
+country = "Spain"
+founded = 1899
+stadium = "Spotify Camp Nou"
+
+[[clubs.players]]
+name = "Lamine Yamal"
+number = 19
+position = "winger"
+
+[[clubs.players]]
+name = "Pedri"
+number = 8
+position = "midfielder"
+
+[clubs.titles]
+la_liga = 27
+champions_league = 5

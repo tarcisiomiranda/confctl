@@ -1,0 +1,85 @@
+name: CD Pipeline - Release
+
+permissions:
+  contents: write
+  actions: read
+  id-token: write
+
+on:
+  push:
+    tags: ['v*']
+    branches: ['main']
+  workflow_dispatch: {}
+
+jobs:
+  release:
+    name: CD - Release & Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ github.token }}
+
+      - name: 🦀 Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.91.1'
+          targets: x86_64-unknown-linux-musl
+
+      - name: 📦 Cache cargo registry & build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-release-
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 📦 Install Python dependencies
+        run: pip install requests
+
+      - name: 🔍 Debug environment
+        run: |
+          echo "GITHUB_REF: $GITHUB_REF"
+          echo "GITHUB_REF_TYPE: $GITHUB_REF_TYPE"
+          echo "GITHUB_REPOSITORY: $GITHUB_REPOSITORY"
+          echo "GITHUB_SERVER_URL: $GITHUB_SERVER_URL"
+          echo "Last 5 tags:"
+          git tag --list | tail -5
+
+      - name: 🏷️ Handle tag/branch logic
+        id: version
+        run: python .github/scripts/release.py
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GIT_SSH_COMMAND: 'ssh -o StrictHostKeyChecking=no'
+          UPDATE_LATEST_RELEASE: ${{ github.ref_type == 'branch' && 'true' || 'false' }}
+
+      - name: 📦 Upload release artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: confctl-release
+          path: confctl
+          retention-days: 90
+
+      - name: ✅ Release Summary
+        if: success()
+        run: |
+          echo "### ✅ Release Published Successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f confctl ]; then
+            SIZE=$(stat -c%s confctl)
+            echo "- 📦 Binary Size: $(numfmt --to=iec-i --suffix=B $SIZE)" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "- 🏷️  Version: ${GITHUB_REF#refs/tags/}" >> $GITHUB_STEP_SUMMARY
