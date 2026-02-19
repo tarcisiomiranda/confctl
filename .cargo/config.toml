@@ -1,0 +1,9 @@
+[target.x86_64-unknown-linux-musl]
+rustflags = [
+  "-C",
+  "target-feature=+crt-static",
+  "-C",
+  "target-cpu=x86-64",
+  "-C",
+  "link-self-contained=yes",
+]

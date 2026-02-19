@@ -1,0 +1,22 @@
+club:
+  name: Real Madrid CF
+  founded: 1902
+  stadium: Santiago Bernabeu
+  capacity: 81044
+  active: true
+
+season:
+  year: "2024-25"
+  league: La Liga
+
+players:
+  - name: Vinicius Junior
+    number: 7
+    position: winger
+  - name: Jude Bellingham
+    number: 5
+    position: midfielder
+
+titles:
+  la_liga: 36
+  champions_league: 15

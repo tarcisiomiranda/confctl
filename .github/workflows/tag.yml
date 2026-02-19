@@ -1,0 +1,30 @@
+name: Auto Tag (Manual)
+
+permissions:
+  contents: write
+  actions: read
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  autotag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🔧 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 📦 Install dependencies
+        run: pip install requests
+
+      - name: 🏷️ Create and push next tag
+        run: python .github/scripts/release.py
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

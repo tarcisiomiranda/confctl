@@ -1,0 +1,24 @@
+[club]
+name = "FC Barcelona"
+founded = 1899
+stadium = "Spotify Camp Nou"
+capacity = 99354
+active = true
+
+[season]
+year = "2024-25"
+league = "La Liga"
+
+[[players]]
+name = "Lamine Yamal"
+number = 19
+position = "winger"
+
+[[players]]
+name = "Pedri"
+number = 8
+position = "midfielder"
+
+[titles]
+la_liga = 27
+champions_league = 5

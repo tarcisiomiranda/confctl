@@ -1,0 +1,74 @@
+[tools]
+rust = "1.91.1"
+
+[env]
+_.path = ["$HOME/.cargo/bin", "$PATH"]
+
+# ============================================
+# confctl — Setup
+# ============================================
+[tasks.setup]
+description = "Instala toolchain Rust e adiciona targets de compilação"
+run = """
+echo "==> Instalando toolchain Rust 1.91.1..."
+rustup install 1.91.1
+rustup default 1.91.1
+
+echo "==> Adicionando targets..."
+rustup target add x86_64-unknown-linux-gnu
+rustup target add x86_64-unknown-linux-musl
+
+echo "==> Setup concluído!"
+rustc --version
+"""
+
+# ============================================
+# confctl — Build
+# ============================================
+[tasks."build:linux-gnu"]
+description = "Build release para x86_64-unknown-linux-gnu"
+run = """
+rustup target add x86_64-unknown-linux-gnu 2>/dev/null || true
+cargo build --release --target x86_64-unknown-linux-gnu
+echo "Binary: target/x86_64-unknown-linux-gnu/release/confctl"
+"""
+
+[tasks."build:linux-musl"]
+description = "Build release estático para x86_64-unknown-linux-musl"
+run = """
+echo "==> Build estático MUSL (link-self-contained via .cargo/config.toml)..."
+rustup target add x86_64-unknown-linux-musl 2>/dev/null || true
+cargo build --release --target x86_64-unknown-linux-musl
+echo "Binary: target/x86_64-unknown-linux-musl/release/confctl"
+"""
+
+[tasks."build:all"]
+description = "Build GNU + MUSL"
+depends = ["build:linux-gnu", "build:linux-musl"]
+
+[tasks."build"]
+description = "Build padrão (release)"
+run = "cargo build --release"
+
+# ============================================
+# confctl — Quality
+# ============================================
+[tasks.test]
+description = "Executa os testes"
+run = "cargo test"
+
+[tasks.check]
+description = "Verifica compilação sem gerar binário"
+run = "cargo check"
+
+[tasks.clippy]
+description = "Executa clippy linter"
+run = "cargo clippy -- -D warnings"
+
+[tasks.fmt]
+description = "Formata o código com rustfmt"
+run = "cargo fmt"
+
+[tasks."fmt:check"]
+description = "Verifica formatação sem alterar"
+run = "cargo fmt -- --check"

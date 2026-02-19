@@ -1,0 +1,29 @@
+{
+  "club": {
+    "name": "Arsenal FC",
+    "founded": 1886,
+    "stadium": "Emirates Stadium",
+    "capacity": 60704,
+    "active": true
+  },
+  "season": {
+    "year": "2024-25",
+    "league": "Premier League"
+  },
+  "players": [
+    {
+      "name": "Bukayo Saka",
+      "number": 7,
+      "position": "winger"
+    },
+    {
+      "name": "Martin Odegaard",
+      "number": 8,
+      "position": "midfielder"
+    }
+  ],
+  "titles": {
+    "premier_league": 13,
+    "fa_cup": 14
+  }
+}
