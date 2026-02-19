@@ -1,0 +1,38 @@
+# Release Notes for confctl
+# Each release can have "title" and "body"
+# The script accepts keys like "v0.0.2", "0.0.2", "v0-0-2" or "0-0-2"
+
+[releases."0.0.2"]
+title = "Syntax Highlighting"
+body = """
+## New Features
+
+- **Syntax highlighting** for JSON output (jq-style colors)
+  - Keys: bold blue
+  - Strings: green
+  - Numbers and booleans: white
+  - Null: gray
+- Automatic terminal detection (colors disabled when piping to file)
+- Native build for **Mac Silicon** (aarch64-apple-darwin)
+
+## Available Tasks (mise)
+
+- `mise run install` - build and install to `~/.local/bin`
+- `mise run build:mac-silicon` - build for Apple Silicon
+- `mise run build:linux-musl` - static build for Linux
+
+## Dependencies Added
+
+- `colored` - output colorization
+- `atty` - TTY detection
+"""
+
+[releases."0.0.1"]
+title = "Initial Release"
+body = """
+## Features
+
+- Read and convert JSON, YAML and TOML files
+- Path navigation using dot notation (e.g., `clubs.0.name`)
+- Pretty-printed JSON output
+"""

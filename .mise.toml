@@ -50,6 +50,29 @@ depends = ["build:linux-gnu", "build:linux-musl"]
 description = "Build padrão (release)"
 run = "cargo build --release"
 
+[tasks."build:mac-silicon"]
+description = "Build release para Mac Silicon (aarch64-apple-darwin)"
+run = """
+rustup target add aarch64-apple-darwin 2>/dev/null || true
+cargo build --release --target aarch64-apple-darwin
+echo "Binary: target/aarch64-apple-darwin/release/confctl"
+"""
+
+[tasks."install"]
+description = "Build e instala o binário em ~/.local/bin"
+run = """
+echo "==> Building release..."
+cargo build --release
+
+echo "==> Installing to ~/.local/bin..."
+mkdir -p ~/.local/bin
+cp target/release/confctl ~/.local/bin/
+chmod +x ~/.local/bin/confctl
+
+echo "==> Installed! Make sure ~/.local/bin is in your PATH"
+~/.local/bin/confctl --version
+"""
+
 # ============================================
 # confctl — Quality
 # ============================================

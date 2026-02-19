@@ -3,6 +3,7 @@ use std::path::Path;
 
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Parser;
+use colored::Colorize;
 use serde_json::Value;
 
 #[derive(Parser)]
@@ -111,20 +112,80 @@ fn format_value(value: &Value) -> String {
     }
 }
 
+fn colorize_json(value: &Value, indent: usize) -> String {
+    let indent_str = "  ".repeat(indent);
+    let next_indent = "  ".repeat(indent + 1);
+
+    match value {
+        Value::Null => "null".bright_black().bold().to_string(),
+        Value::Bool(b) => b.to_string().white().to_string(),
+        Value::Number(n) => n.to_string().white().to_string(),
+        Value::String(s) => format!("\"{}\"", s).green().to_string(),
+        Value::Array(arr) => {
+            if arr.is_empty() {
+                "[]".to_string()
+            } else {
+                let items: Vec<String> = arr
+                    .iter()
+                    .map(|v| format!("{}{}", next_indent, colorize_json(v, indent + 1)))
+                    .collect();
+                format!("[\n{}\n{}]", items.join(",\n"), indent_str)
+            }
+        }
+        Value::Object(map) => {
+            if map.is_empty() {
+                "{}".to_string()
+            } else {
+                let items: Vec<String> = map
+                    .iter()
+                    .map(|(k, v)| {
+                        format!(
+                            "{}{}: {}",
+                            next_indent,
+                            format!("\"{}\"", k).blue().bold(),
+                            colorize_json(v, indent + 1)
+                        )
+                    })
+                    .collect();
+                format!("{{\n{}\n{}}}", items.join(",\n"), indent_str)
+            }
+        }
+    }
+}
+
+fn format_value_colored(value: &Value) -> String {
+    match value {
+        Value::String(s) => s.clone(),
+        Value::Null => "null".bright_black().bold().to_string(),
+        Value::Bool(b) => b.to_string().white().to_string(),
+        Value::Number(n) => n.to_string().white().to_string(),
+        _ => colorize_json(value, 0),
+    }
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
+    let use_color = atty::is(atty::Stream::Stdout);
 
     let value = parse_file(&cli.file)?;
 
     match cli.path {
         Some(path) => {
             let result = resolve_path(&value, &path)?;
-            println!("{}", format_value(result));
+            if use_color {
+                println!("{}", format_value_colored(result));
+            } else {
+                println!("{}", format_value(result));
+            }
         }
         None => {
-            let pretty = serde_json::to_string_pretty(&value)
-                .context("Failed to serialize value to JSON")?;
-            println!("{pretty}");
+            if use_color {
+                println!("{}", colorize_json(&value, 0));
+            } else {
+                let pretty = serde_json::to_string_pretty(&value)
+                    .context("Failed to serialize value to JSON")?;
+                println!("{pretty}");
+            }
         }
     }
 
