@@ -6,9 +6,9 @@ from pathlib import Path
 import subprocess
 import requests
 import tomllib
+import shutil
 import sys
 import os
-
 
 
 class GitHubReleaser:
@@ -21,12 +21,16 @@ class GitHubReleaser:
         self.ref = os.getenv("GITHUB_REF", "")
         self.token = os.getenv("GITHUB_TOKEN", "")
         self.binary_name = "confctl"
-        self.update_latest = os.getenv(
-            "UPDATE_LATEST_RELEASE", ""
-        ).lower() in ("1", "true", "yes")
+        self.update_latest = os.getenv("UPDATE_LATEST_RELEASE", "").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
 
     def run_command(
-        self, cmd: str, capture_output: bool = False,
+        self,
+        cmd: str,
+        capture_output: bool = False,
     ) -> Optional[str]:
         """Executes a shell command."""
         try:
@@ -67,14 +71,15 @@ class GitHubReleaser:
         return new_tag
 
     def get_latest_tag(self) -> str:
-        """Return the latest tag (highest semver) available in the repo."""
+        """Return the latest tag (highest semver). Creates v0.0.1 if none exist."""
         self.run_command("git fetch --prune --tags")
         last_tag = self.run_command(
             "git tag --sort=-v:refname | head -n1", capture_output=True
         )
         if not last_tag:
-            print("ERROR: No tags found; cannot update latest release.")
-            sys.exit(1)
+            print("No tags found; bootstrapping first release tag v0.0.1")
+            self.push_tag("v0.0.1")
+            return "v0.0.1"
         print(f"Latest tag: {last_tag}")
         return last_tag
 
@@ -83,9 +88,7 @@ class GitHubReleaser:
         self.run_command(f"git tag {tag}")
 
         if self.server == "https://github.com":
-            push_url = (
-                f"https://x-access-token:{self.token}@github.com/{self.repo}.git"
-            )
+            push_url = f"https://x-access-token:{self.token}@github.com/{self.repo}.git"
             self.run_command(f"git push {push_url} {tag}")
         else:
             self.run_command(f"git push origin {tag}")
@@ -108,13 +111,13 @@ class GitHubReleaser:
         """Builds the Rust binary with release profile."""
         print(f"Building binary for tag: {tag}")
 
-        # Build static release binary with MUSL for maximum portability
         build_cmd = "cargo build --release --target x86_64-unknown-linux-musl"
         self.run_command(build_cmd)
 
-        binary_path = Path(f"target/x86_64-unknown-linux-musl/release/{self.binary_name}")
+        binary_path = Path(
+            f"target/x86_64-unknown-linux-musl/release/{self.binary_name}"
+        )
         if not binary_path.exists():
-            # Fallback: try default release path
             binary_path = Path(f"target/release/{self.binary_name}")
             if not binary_path.exists():
                 print(f"ERROR: Binary {self.binary_name} not found after build")
@@ -123,8 +126,6 @@ class GitHubReleaser:
         file_size = binary_path.stat().st_size
         print(f"Binary built successfully: {file_size:,} bytes")
 
-        # Copy binary to workspace root for upload
-        import shutil
         shutil.copy2(str(binary_path), self.binary_name)
 
         return file_size
@@ -156,9 +157,7 @@ class GitHubReleaser:
             return
 
         if self.server == "https://github.com":
-            push_url = (
-                f"https://x-access-token:{self.token}@github.com/{self.repo}.git"
-            )
+            push_url = f"https://x-access-token:{self.token}@github.com/{self.repo}.git"
             self.run_command("git push %s HEAD:main" % push_url, capture_output=False)
         else:
             self.run_command("git push origin HEAD:main", capture_output=False)
@@ -201,9 +200,12 @@ class GitHubReleaser:
             body = os.getenv("RELEASE_BODY", "").strip()
         if not body:
             try:
-                body = self.run_command(
-                    f"git tag -l --format='%(contents)' {tag}", capture_output=True
-                ) or ""
+                body = (
+                    self.run_command(
+                        f"git tag -l --format='%(contents)' {tag}", capture_output=True
+                    )
+                    or ""
+                )
             except Exception:
                 body = ""
         if not body:
@@ -285,7 +287,9 @@ class GitHubReleaser:
                         if asset.get("name") == self.binary_name:
                             asset_id = asset.get("id")
                             del_url = f"https://api.github.com/repos/{self.repo}/releases/assets/{asset_id}"
-                            print(f"Deleting existing asset '{self.binary_name}' (id={asset_id})")
+                            print(
+                                f"Deleting existing asset '{self.binary_name}' (id={asset_id})"
+                            )
                             requests.delete(del_url, headers=list_headers)
                 else:
                     print(f"WARNING: Could not list assets (status {resp.status_code})")
@@ -315,9 +319,15 @@ class GitHubReleaser:
         if self.ref_type == "branch":
             if self.update_latest:
                 tag = self.get_latest_tag()
-                print(f"Branch push: updating existing release for {tag}")
+                print(f"Branch push: updating release for {tag}")
+                try:
+                    self.update_version_file(tag)
+                except Exception as e:
+                    print(f"WARNING: Could not update VERSION on main: {e}")
             else:
-                print("Branch push detected; UPDATE_LATEST_RELEASE is not set. Skipping release.")
+                print(
+                    "Branch push detected; UPDATE_LATEST_RELEASE is not set. Skipping release."
+                )
                 sys.exit(0)
         elif self.ref_type == "tag":
             tag = self.extract_tag_from_ref()
