@@ -305,7 +305,6 @@ class GitHubReleaser:
         print(f"\nUploading {len(binaries)} binaries to release...")
         for binary_path in binaries:
             self.upload_binary(release_data, binary_path)
-            sys.exit(1)
 
     def run(self):
         """Runs the complete release process."""

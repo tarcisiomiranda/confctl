@@ -13,7 +13,6 @@ use serde_json::{Map, Value};
     version,
     about = "A simplified jq for configuration files (JSON, YAML, TOML, ENV)"
 )]
-
 struct Cli {
     file: String,
     path: Option<String>,
@@ -56,10 +55,7 @@ fn looks_like_env_format(content: &str) -> bool {
 
 fn detect_format(file_path: &str, content: &str) -> Result<Format> {
     let path = Path::new(file_path);
-    let file_name = path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("");
+    let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
     if file_name == ".env" || file_name.starts_with(".env.") {
         return Ok(Format::Env);
@@ -76,7 +72,9 @@ fn detect_format(file_path: &str, content: &str) -> Result<Format> {
         Some("toml") => Ok(Format::Toml),
         Some("env") => Ok(Format::Env),
         Some(other) => {
-            bail!("Unsupported file extension: .{other}. Supported: .json, .yaml, .yml, .toml, .env")
+            bail!(
+                "Unsupported file extension: .{other}. Supported: .json, .yaml, .yml, .toml, .env"
+            )
         }
         None => {
             if looks_like_env_format(content) {
