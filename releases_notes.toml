@@ -1,8 +1,8 @@
 # Release Notes for confctl
 # Each release can have "title" and "body"
-# The script accepts keys like "v0.0.3", "0.0.3", "v0-0-3" or "0-0-3"
+# The script accepts keys like "v0.0.2", "0.0.2", "v0-0-2" or "0-0-2"
 
-[releases."0.0.3"]
+[releases."0.0.2"]
 title = "Multi-platform + New Features"
 body = """
 ## New Features
@@ -31,15 +31,6 @@ body = """
 - `colored` - output colorization
 - `atty` - TTY detection
 - `base64` - base64 encoding/decoding
-"""
-
-[releases."0.0.2"]
-title = "Syntax Highlighting"
-body = """
-## New Features
-
-- **Syntax highlighting** for JSON output (jq-style colors)
-- Automatic terminal detection (colors disabled when piping to file)
 """
 
 [releases."0.0.1"]
