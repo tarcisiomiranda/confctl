@@ -12,58 +12,32 @@ confctl config.toml
 
 ## Installation
 
-### One-line install (auto-detects root vs user)
+### Quick install (recommended)
 
 ```bash
-curl -fsSL https://github.com/tarcisiomiranda/confctl/releases/latest/download/confctl \
-  -o /tmp/confctl && chmod +x /tmp/confctl
-
-if [ "$(id -u)" -eq 0 ]; then
-  mv /tmp/confctl /usr/local/bin/confctl
-  echo "Installed to /usr/local/bin/confctl"
-else
-  mkdir -p ~/.local/bin
-  mv /tmp/confctl ~/.local/bin/confctl
-  echo "Installed to ~/.local/bin/confctl"
-  echo ""
-  echo "Make sure ~/.local/bin is in your PATH. Add to ~/.bashrc or ~/.zshrc:"
-  echo '  export PATH="$HOME/.local/bin:$PATH"'
-fi
+curl -fsSL https://raw.githubusercontent.com/tarcisiomiranda/confctl/main/install.sh | bash
 ```
 
-### Manual install
-
-**As root / sudo:**
-```bash
-curl -L https://github.com/tarcisiomiranda/confctl/releases/latest/download/confctl \
-  | sudo install /dev/stdin /usr/local/bin/confctl
-```
-
-**As regular user (no sudo):**
-```bash
-mkdir -p ~/.local/bin
-curl -fsSL https://github.com/tarcisiomiranda/confctl/releases/latest/download/confctl \
-  -o ~/.local/bin/confctl
-chmod +x ~/.local/bin/confctl
-
-# Add to your shell profile if not already there:
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
-```
-
-Verify:
+Or install a specific version:
 
 ```bash
-confctl --version
-# confctl 0.1.0
+curl -fsSL https://raw.githubusercontent.com/tarcisiomiranda/confctl/main/install.sh | bash -s v0.0.2
 ```
+
+### Available binaries
+
+| Binary | Platform |
+|--------|----------|
+| `confctl-linux-amd64` | Linux x86_64 (static MUSL) |
+| `confctl-darwin-arm64` | macOS Apple Silicon (M1/M2/M3) |
+| `confctl-darwin-amd64` | macOS Intel |
 
 ### Install in a Dockerfile (using ADD)
 
-The binary is fully static — no dependencies, no glibc. Use `ADD` to pull it directly from GitHub Releases:
+The Linux binary is fully static — no dependencies, no glibc. Use `ADD` to pull it directly from GitHub Releases:
 
 ```dockerfile
-ADD https://github.com/tarcisiomiranda/confctl/releases/latest/download/confctl \
+ADD https://github.com/tarcisiomiranda/confctl/releases/latest/download/confctl-linux-amd64 \
     /usr/local/bin/confctl
 RUN chmod +x /usr/local/bin/confctl
 ```
@@ -71,7 +45,7 @@ RUN chmod +x /usr/local/bin/confctl
 Or pin to a specific version for reproducibility:
 
 ```dockerfile
-ADD https://github.com/tarcisiomiranda/confctl/releases/download/v0.1.0/confctl \
+ADD https://github.com/tarcisiomiranda/confctl/releases/download/v0.0.2/confctl-linux-amd64 \
     /usr/local/bin/confctl
 RUN chmod +x /usr/local/bin/confctl
 ```
