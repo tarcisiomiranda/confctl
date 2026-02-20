@@ -1,9 +1,9 @@
 # Release Notes for confctl
 # Each release can have "title" and "body"
-# The script accepts keys like "v0.0.2", "0.0.2", "v0-0-2" or "0-0-2"
+# The script accepts keys like "v0.0.3", "0.0.3", "v0-0-3" or "0-0-3"
 
-[releases."0.0.2"]
-title = "Syntax Highlighting"
+[releases."0.0.3"]
+title = "Multi-platform + New Features"
 body = """
 ## New Features
 
@@ -12,19 +12,34 @@ body = """
   - Strings: green
   - Numbers and booleans: white
   - Null: gray
+- **ENV file support** - read `.env`, `/etc/os-release` and KEY=value files
+  - Auto-detection by content (no extension required)
+  - Supports `.env`, `.env.local`, `.env.production`, etc.
+- **Base64 encode/decode** built-in
+  - `-e` / `--encode` to encode values
+  - `-d` / `--decode` to decode values
 - Automatic terminal detection (colors disabled when piping to file)
-- Native build for **Mac Silicon** (aarch64-apple-darwin)
 
-## Available Tasks (mise)
+## Multi-platform Binaries
 
-- `mise run install` - build and install to `~/.local/bin`
-- `mise run build:mac-silicon` - build for Apple Silicon
-- `mise run build:linux-musl` - static build for Linux
+- `confctl-linux-amd64` - Linux x86_64 (static MUSL)
+- `confctl-darwin-arm64` - macOS Apple Silicon (M1/M2/M3)
+- `confctl-darwin-amd64` - macOS Intel
 
 ## Dependencies Added
 
 - `colored` - output colorization
 - `atty` - TTY detection
+- `base64` - base64 encoding/decoding
+"""
+
+[releases."0.0.2"]
+title = "Syntax Highlighting"
+body = """
+## New Features
+
+- **Syntax highlighting** for JSON output (jq-style colors)
+- Automatic terminal detection (colors disabled when piping to file)
 """
 
 [releases."0.0.1"]

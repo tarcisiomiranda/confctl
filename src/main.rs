@@ -2,29 +2,70 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::{anyhow, bail, Context, Result};
+use base64::{engine::general_purpose::STANDARD, Engine};
 use clap::Parser;
 use colored::Colorize;
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 #[derive(Parser)]
 #[command(
     name = "confctl",
     version,
-    about = "A simplified jq for configuration files (JSON, YAML, TOML)"
+    about = "A simplified jq for configuration files (JSON, YAML, TOML, ENV)"
 )]
+
 struct Cli {
     file: String,
     path: Option<String>,
+
+    #[arg(short = 'd', long = "decode", conflicts_with = "encode")]
+    decode: bool,
+
+    #[arg(short = 'e', long = "encode", conflicts_with = "decode")]
+    encode: bool,
 }
 
 enum Format {
     Json,
     Yaml,
     Toml,
+    Env,
 }
 
-fn detect_format(file_path: &str) -> Result<Format> {
-    let ext = Path::new(file_path)
+fn looks_like_env_format(content: &str) -> bool {
+    let mut valid_lines = 0;
+    let mut total_non_empty = 0;
+
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        total_non_empty += 1;
+
+        if let Some(pos) = line.find('=') {
+            let key = &line[..pos];
+            if !key.is_empty() && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+                valid_lines += 1;
+            }
+        }
+    }
+
+    total_non_empty > 0 && valid_lines == total_non_empty
+}
+
+fn detect_format(file_path: &str, content: &str) -> Result<Format> {
+    let path = Path::new(file_path);
+    let file_name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("");
+
+    if file_name == ".env" || file_name.starts_with(".env.") {
+        return Ok(Format::Env);
+    }
+
+    let ext = path
         .extension()
         .and_then(|e| e.to_str())
         .map(|e| e.to_lowercase());
@@ -33,18 +74,64 @@ fn detect_format(file_path: &str) -> Result<Format> {
         Some("json") => Ok(Format::Json),
         Some("yaml" | "yml") => Ok(Format::Yaml),
         Some("toml") => Ok(Format::Toml),
+        Some("env") => Ok(Format::Env),
         Some(other) => {
-            bail!("Unsupported file extension: .{other}. Supported: .json, .yaml, .yml, .toml")
+            bail!("Unsupported file extension: .{other}. Supported: .json, .yaml, .yml, .toml, .env")
         }
-        None => bail!("Could not determine file format: no extension found on '{file_path}'"),
+        None => {
+            if looks_like_env_format(content) {
+                Ok(Format::Env)
+            } else {
+                bail!("Could not determine file format for '{file_path}'. Use a known extension or KEY=value format.")
+            }
+        }
     }
+}
+
+fn parse_env_format(content: &str) -> Value {
+    let mut map = Map::new();
+
+    for line in content.lines() {
+        let line = line.trim();
+
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+
+        if let Some(pos) = line.find('=') {
+            let key = line[..pos].trim().to_string();
+            let mut value = line[pos + 1..].trim();
+
+            if (value.starts_with('"') && value.ends_with('"'))
+                || (value.starts_with('\'') && value.ends_with('\''))
+            {
+                value = &value[1..value.len() - 1];
+            }
+
+            let json_value = if let Ok(n) = value.parse::<i64>() {
+                Value::Number(n.into())
+            } else if let Ok(n) = value.parse::<f64>() {
+                Value::Number(serde_json::Number::from_f64(n).unwrap_or_else(|| 0.into()))
+            } else if value.eq_ignore_ascii_case("true") {
+                Value::Bool(true)
+            } else if value.eq_ignore_ascii_case("false") {
+                Value::Bool(false)
+            } else {
+                Value::String(value.to_string())
+            };
+
+            map.insert(key, json_value);
+        }
+    }
+
+    Value::Object(map)
 }
 
 fn parse_file(file_path: &str) -> Result<Value> {
     let content = fs::read_to_string(file_path)
         .with_context(|| format!("Failed to read file: {file_path}"))?;
 
-    let format = detect_format(file_path)?;
+    let format = detect_format(file_path, &content)?;
 
     let value = match format {
         Format::Json => serde_json::from_str::<Value>(&content)
@@ -58,6 +145,7 @@ fn parse_file(file_path: &str) -> Result<Value> {
                 serde_json::to_string(&toml_value).context("Failed to serialize TOML to JSON")?;
             serde_json::from_str::<Value>(&json_str).context("Failed to deserialize TOML-JSON")?
         }
+        Format::Env => parse_env_format(&content),
     };
 
     Ok(value)
@@ -163,6 +251,19 @@ fn format_value_colored(value: &Value) -> String {
     }
 }
 
+fn apply_base64_transform(input: &str, decode: bool, encode: bool) -> Result<String> {
+    if decode {
+        let decoded = STANDARD
+            .decode(input.trim())
+            .context("Failed to decode base64")?;
+        String::from_utf8(decoded).context("Decoded base64 is not valid UTF-8")
+    } else if encode {
+        Ok(STANDARD.encode(input))
+    } else {
+        Ok(input.to_string())
+    }
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let use_color = atty::is(atty::Stream::Stdout);
@@ -172,14 +273,23 @@ fn main() -> Result<()> {
     match cli.path {
         Some(path) => {
             let result = resolve_path(&value, &path)?;
-            if use_color {
+            let output = format_value(result);
+            let final_output = apply_base64_transform(&output, cli.decode, cli.encode)?;
+
+            if cli.decode || cli.encode {
+                print!("{}", final_output);
+            } else if use_color {
                 println!("{}", format_value_colored(result));
             } else {
-                println!("{}", format_value(result));
+                println!("{}", output);
             }
         }
         None => {
-            if use_color {
+            if cli.encode {
+                let json_str = serde_json::to_string_pretty(&value)
+                    .context("Failed to serialize value to JSON")?;
+                print!("{}", STANDARD.encode(&json_str));
+            } else if use_color {
                 println!("{}", colorize_json(&value, 0));
             } else {
                 let pretty = serde_json::to_string_pretty(&value)

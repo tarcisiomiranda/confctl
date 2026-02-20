@@ -12,74 +12,113 @@ on:
   workflow_dispatch: {}
 
 jobs:
-  release:
-    name: CD - Release & Deploy
-    runs-on: ubuntu-latest
+  build:
+    name: Build - ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            binary_name: confctl-linux-amd64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            binary_name: confctl-darwin-arm64
+          - os: macos-13
+            target: x86_64-apple-darwin
+            binary_name: confctl-darwin-amd64
 
     steps:
-      - name: 📥 Checkout code
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ github.token }}
 
-      - name: 🦀 Setup Rust
+      - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.91.1'
-          targets: x86_64-unknown-linux-musl
+          targets: ${{ matrix.target }}
 
-      - name: 📦 Cache cargo registry & build
+      - name: Cache cargo
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-release-
+            ${{ runner.os }}-${{ matrix.target }}-cargo-
 
-      - name: 🐍 Setup Python
+      - name: Build release
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Rename binary
+        run: |
+          cp target/${{ matrix.target }}/release/confctl ${{ matrix.binary_name }}
+          chmod +x ${{ matrix.binary_name }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.binary_name }}
+          path: ${{ matrix.binary_name }}
+          retention-days: 7
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref_type == 'tag' || github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ github.token }}
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare binaries
+        run: |
+          mkdir -p release
+          find artifacts -type f -name 'confctl-*' -exec cp {} release/ \;
+          ls -la release/
+
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: 📦 Install Python dependencies
+      - name: Install Python dependencies
         run: pip install requests
 
-      - name: 🔍 Debug environment
+      - name: Debug environment
         run: |
           echo "GITHUB_REF: $GITHUB_REF"
           echo "GITHUB_REF_TYPE: $GITHUB_REF_TYPE"
-          echo "GITHUB_REPOSITORY: $GITHUB_REPOSITORY"
-          echo "GITHUB_SERVER_URL: $GITHUB_SERVER_URL"
-          echo "Last 5 tags:"
-          git tag --list | tail -5
+          echo "Binaries to upload:"
+          ls -la release/
 
-      - name: 🏷️ Handle tag/branch logic
-        id: version
+      - name: Create Release
         run: python .github/scripts/release.py
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GIT_SSH_COMMAND: 'ssh -o StrictHostKeyChecking=no'
           UPDATE_LATEST_RELEASE: ${{ github.ref_type == 'branch' && 'true' || 'false' }}
 
-      - name: 📦 Upload release artifact
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: confctl-release
-          path: confctl
-          retention-days: 90
-
-      - name: ✅ Release Summary
+      - name: Release Summary
         if: success()
         run: |
-          echo "### ✅ Release Published Successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "### Release Published!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          if [ -f confctl ]; then
-            SIZE=$(stat -c%s confctl)
-            echo "- 📦 Binary Size: $(numfmt --to=iec-i --suffix=B $SIZE)" >> $GITHUB_STEP_SUMMARY
-          fi
-          echo "- 🏷️  Version: ${GITHUB_REF#refs/tags/}" >> $GITHUB_STEP_SUMMARY
+          echo "#### Binaries:" >> $GITHUB_STEP_SUMMARY
+          for f in release/*; do
+            SIZE=$(stat -c%s "$f" 2>/dev/null || stat -f%z "$f")
+            echo "- $(basename $f): $(numfmt --to=iec-i --suffix=B $SIZE 2>/dev/null || echo $SIZE bytes)" >> $GITHUB_STEP_SUMMARY
+          done

@@ -6,7 +6,6 @@ from pathlib import Path
 import subprocess
 import requests
 import tomllib
-import shutil
 import sys
 import os
 
@@ -107,28 +106,16 @@ class GitHubReleaser:
         """Extracts the tag name from the ref."""
         return self.ref.rsplit("/", 1)[-1]
 
-    def build_binary(self, tag: str):
-        """Builds the Rust binary with release profile."""
-        print(f"Building binary for tag: {tag}")
+    def find_binaries(self) -> list:
+        """Find pre-built binaries in release/ directory."""
+        release_dir = Path("release")
+        if not release_dir.exists():
+            print("WARNING: release/ directory not found")
+            return []
 
-        build_cmd = "cargo build --release --target x86_64-unknown-linux-musl"
-        self.run_command(build_cmd)
-
-        binary_path = Path(
-            f"target/x86_64-unknown-linux-musl/release/{self.binary_name}"
-        )
-        if not binary_path.exists():
-            binary_path = Path(f"target/release/{self.binary_name}")
-            if not binary_path.exists():
-                print(f"ERROR: Binary {self.binary_name} not found after build")
-                sys.exit(1)
-
-        file_size = binary_path.stat().st_size
-        print(f"Binary built successfully: {file_size:,} bytes")
-
-        shutil.copy2(str(binary_path), self.binary_name)
-
-        return file_size
+        binaries = list(release_dir.glob("confctl-*"))
+        print(f"Found {len(binaries)} binaries: {[b.name for b in binaries]}")
+        return binaries
 
     def update_version_file(self, tag: str):
         """Updates the VERSION file to match the release tag and pushes to main."""
@@ -258,15 +245,17 @@ class GitHubReleaser:
 
         return response.json()
 
-    def upload_binary(self, release_data: dict, file_size: int):
-        """Uploads the binary to the release."""
+    def upload_binary(self, release_data: dict, binary_path: Path):
+        """Uploads a binary to the release."""
+        binary_name = binary_path.name
+        file_size = binary_path.stat().st_size
+
         upload_url_template = release_data["upload_url"]
         upload_url = upload_url_template.replace(
-            "{?name,label}", f"?name={self.binary_name}"
+            "{?name,label}", f"?name={binary_name}"
         )
 
-        print(f"Release ID: {release_data['id']}")
-        print(f"Uploading binary ({file_size:,} bytes)...")
+        print(f"Uploading {binary_name} ({file_size:,} bytes)...")
 
         headers = {
             "Authorization": f"Bearer {self.token}",
@@ -284,11 +273,11 @@ class GitHubReleaser:
                 resp = requests.get(assets_api, headers=list_headers)
                 if resp.status_code == 200:
                     for asset in resp.json():
-                        if asset.get("name") == self.binary_name:
+                        if asset.get("name") == binary_name:
                             asset_id = asset.get("id")
                             del_url = f"https://api.github.com/repos/{self.repo}/releases/assets/{asset_id}"
                             print(
-                                f"Deleting existing asset '{self.binary_name}' (id={asset_id})"
+                                f"Deleting existing asset '{binary_name}' (id={asset_id})"
                             )
                             requests.delete(del_url, headers=list_headers)
                 else:
@@ -296,20 +285,26 @@ class GitHubReleaser:
             except Exception as e:
                 print(f"WARNING: Could not delete existing asset: {e}")
 
-        with open(self.binary_name, "rb") as binary_file:
+        with open(binary_path, "rb") as binary_file:
             response = requests.post(
                 upload_url, headers=headers, data=binary_file.read()
             )
 
         if response.status_code == 201:
-            print("✓ Binary uploaded successfully!")
+            print(f"  Uploaded: {binary_name}")
             asset_info = response.json()
-            print(f"Asset URL: {asset_info['browser_download_url']}")
+            print(f"  URL: {asset_info['browser_download_url']}")
         else:
             print(
-                f"ERROR: Failed to upload binary. "
+                f"ERROR: Failed to upload {binary_name}. "
                 f"Status: {response.status_code}\nResponse: {response.text}"
             )
+
+    def upload_all_binaries(self, release_data: dict, binaries: list):
+        """Upload all binaries to the release."""
+        print(f"\nUploading {len(binaries)} binaries to release...")
+        for binary_path in binaries:
+            self.upload_binary(release_data, binary_path)
             sys.exit(1)
 
     def run(self):
@@ -340,7 +335,7 @@ class GitHubReleaser:
             print(f"Unknown ref type: {self.ref_type}")
             sys.exit(1)
 
-        file_size = self.build_binary(tag)
+        binaries = self.find_binaries()
 
         if self.server != "https://github.com":
             print("Gitea detected; skipping release upload")
@@ -348,9 +343,13 @@ class GitHubReleaser:
 
         print("Creating or updating GitHub release...")
         release_data = self.create_or_get_release(tag)
-        self.upload_binary(release_data, file_size)
 
-        print(f"Release created successfully: {tag}")
+        if binaries:
+            self.upload_all_binaries(release_data, binaries)
+        else:
+            print("WARNING: No binaries found to upload")
+
+        print(f"\nRelease created successfully: {tag}")
 
 
 def main():
