@@ -92,7 +92,8 @@ fn test_resolve_input_single_arg_becomes_path_when_piped_and_file_missing() {
 
 #[test]
 fn test_resolve_input_keeps_explicit_file_when_present() {
-    let (file, path) = resolve_input(Some("testdata/config.json".to_string()), None, false).unwrap();
+    let (file, path) =
+        resolve_input(Some("testdata/config.json".to_string()), None, false).unwrap();
     assert_eq!(file, "testdata/config.json");
     assert_eq!(path, None);
 }

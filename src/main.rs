@@ -171,7 +171,8 @@ fn parse_file(file_path: &str, forced_format: Option<Format>) -> Result<Value> {
             .context("Failed to read from stdin")?;
         input
     } else {
-        fs::read_to_string(file_path).with_context(|| format!("Failed to read file: {file_path}"))?
+        fs::read_to_string(file_path)
+            .with_context(|| format!("Failed to read file: {file_path}"))?
     };
 
     parse_content(file_path, &content, forced_format)
@@ -306,7 +307,11 @@ Tip: use '-' to force stdin explicitly:
 Run 'confctl --help' for full usage."
 }
 
-fn resolve_input(file: Option<String>, path: Option<String>, stdin_is_tty: bool) -> Result<(String, Option<String>)> {
+fn resolve_input(
+    file: Option<String>,
+    path: Option<String>,
+    stdin_is_tty: bool,
+) -> Result<(String, Option<String>)> {
     match (file, path) {
         (Some(file), Some(path)) => Ok((file, Some(path))),
         (Some(file), None) => {
