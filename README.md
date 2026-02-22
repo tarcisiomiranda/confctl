@@ -1,6 +1,6 @@
 # confctl
 
-Inspired by [jq](https://jqlang.github.io/jq/), `confctl` brings the same idea of querying structured data to configuration files. Instead of JSON streams, it targets the files engineers actually use day-to-day — JSON, YAML, and TOML — with a simple dotted path syntax and no filter language to learn.
+`confctl` is a Lightweight CLI for querying structured data in configuration files. It supports the formats engineers use day to day: JSON, YAML, and TOML with a simple dotted path syntax and no filter language to learn.
 
 ## Demo
 
@@ -38,7 +38,7 @@ curl -fsSL https://raw.githubusercontent.com/tarcisiomiranda/confctl/main/instal
 
 ### Install in a Dockerfile (using ADD)
 
-The Linux binary is fully static — no dependencies, no glibc. Use `ADD` to pull it directly from GitHub Releases:
+The Linux binary is fully static no dependencies, no glibc. Use `ADD` to pull it directly from GitHub Releases:
 
 ```dockerfile
 ADD https://github.com/tarcisiomiranda/confctl/releases/latest/download/confctl-linux-amd64 \
@@ -54,7 +54,7 @@ ADD https://github.com/tarcisiomiranda/confctl/releases/download/v0.0.2/confctl-
 RUN chmod +x /usr/local/bin/confctl
 ```
 
-Works with any base image (`debian`, `alpine`, `ubuntu`, `scratch`-based) — no apt/apk install required.
+Works with any base image (`debian`, `alpine`, `ubuntu`, `scratch`-based) no apt/apk install required.
 
 ---
 
@@ -64,8 +64,8 @@ Works with any base image (`debian`, `alpine`, `ubuntu`, `scratch`-based) — no
 confctl <file> [path]
 ```
 
-- **With path** — extracts the value at the dotted path
-- **Without path** — prints the entire file as normalized JSON
+- **With path**  extracts the value at the dotted path
+- **Without path**  sprints the entire file as normalized JSON
 
 ### Extracting values
 
@@ -87,7 +87,7 @@ confctl config.yaml clubs.1.stadium
 
 ### Printing the whole file
 
-Omit the path to dump the entire file as formatted JSON — useful for discovering available keys.
+Omit the path to dump the entire file as formatted JSON useful for discovering available keys.
 
 ```bash
 confctl config.toml
