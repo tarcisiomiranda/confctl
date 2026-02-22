@@ -1,6 +1,25 @@
 # Release Notes for confctl
 # Each release can have "title" and "body"
-# The script accepts keys like "v0.0.2", "0.0.2", "v0-0-2" or "0-0-2"
+# The script accepts keys like "v0.0.3", "0.0.3", "v0-0-3" or "0-0-3"
+
+[releases."0.0.3"]
+title = "Stdin UX + Format Override"
+body = """
+## New Features
+
+- **Stdin-first workflow**
+  - Running `confctl` with piped input now uses stdin automatically
+  - Single-argument pipe usage works as a path query (example: `... | confctl 0.login`)
+- **Optional explicit format override**
+  - Added `--format <json|yaml|toml|env>` for stdin and extensionless input
+- **Interactive mini tutorial**
+  - Running `confctl` without file and without stdin now shows quick usage examples
+
+## Improvements
+
+- Better format auto-detection for extensionless input
+- Tests moved to `src/tests.rs` for cleaner project structure
+"""
 
 [releases."0.0.2"]
 title = "Multi-platform + New Features"

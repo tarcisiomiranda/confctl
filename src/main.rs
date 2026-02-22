@@ -1,9 +1,10 @@
 use std::fs;
+use std::io::{self, Read};
 use std::path::Path;
 
 use anyhow::{anyhow, bail, Context, Result};
 use base64::{engine::general_purpose::STANDARD, Engine};
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use colored::Colorize;
 use serde_json::{Map, Value};
 
@@ -11,11 +12,14 @@ use serde_json::{Map, Value};
 #[command(
     name = "confctl",
     version,
-    about = "A simplified jq for configuration files (JSON, YAML, TOML, ENV)"
+    about = "CLI for querying configuration files (JSON, YAML, TOML, ENV)"
 )]
 struct Cli {
-    file: String,
+    file: Option<String>,
     path: Option<String>,
+
+    #[arg(long, value_enum)]
+    format: Option<Format>,
 
     #[arg(short = 'd', long = "decode", conflicts_with = "encode")]
     decode: bool,
@@ -24,6 +28,7 @@ struct Cli {
     encode: bool,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
 enum Format {
     Json,
     Yaml,
@@ -53,7 +58,11 @@ fn looks_like_env_format(content: &str) -> bool {
     total_non_empty > 0 && valid_lines == total_non_empty
 }
 
-fn detect_format(file_path: &str, content: &str) -> Result<Format> {
+fn detect_format(file_path: &str, content: &str, forced_format: Option<Format>) -> Result<Format> {
+    if let Some(format) = forced_format {
+        return Ok(format);
+    }
+
     let path = Path::new(file_path);
     let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
@@ -79,8 +88,16 @@ fn detect_format(file_path: &str, content: &str) -> Result<Format> {
         None => {
             if looks_like_env_format(content) {
                 Ok(Format::Env)
+            } else if serde_json::from_str::<Value>(content).is_ok() {
+                Ok(Format::Json)
+            } else if toml::from_str::<toml::Value>(content).is_ok() {
+                Ok(Format::Toml)
+            } else if serde_yaml::from_str::<Value>(content).is_ok() {
+                Ok(Format::Yaml)
             } else {
-                bail!("Could not determine file format for '{file_path}'. Use a known extension or KEY=value format.")
+                bail!(
+                    "Could not determine file format for '{file_path}'. Use a known extension or pass --format."
+                )
             }
         }
     }
@@ -125,28 +142,39 @@ fn parse_env_format(content: &str) -> Value {
     Value::Object(map)
 }
 
-fn parse_file(file_path: &str) -> Result<Value> {
-    let content = fs::read_to_string(file_path)
-        .with_context(|| format!("Failed to read file: {file_path}"))?;
-
-    let format = detect_format(file_path, &content)?;
+fn parse_content(file_path: &str, content: &str, forced_format: Option<Format>) -> Result<Value> {
+    let format = detect_format(file_path, content, forced_format)?;
 
     let value = match format {
-        Format::Json => serde_json::from_str::<Value>(&content)
+        Format::Json => serde_json::from_str::<Value>(content)
             .with_context(|| format!("Failed to parse JSON: {file_path}"))?,
-        Format::Yaml => serde_yaml::from_str::<Value>(&content)
+        Format::Yaml => serde_yaml::from_str::<Value>(content)
             .with_context(|| format!("Failed to parse YAML: {file_path}"))?,
         Format::Toml => {
-            let toml_value: toml::Value = toml::from_str(&content)
+            let toml_value: toml::Value = toml::from_str(content)
                 .with_context(|| format!("Failed to parse TOML: {file_path}"))?;
             let json_str =
                 serde_json::to_string(&toml_value).context("Failed to serialize TOML to JSON")?;
             serde_json::from_str::<Value>(&json_str).context("Failed to deserialize TOML-JSON")?
         }
-        Format::Env => parse_env_format(&content),
+        Format::Env => parse_env_format(content),
     };
 
     Ok(value)
+}
+
+fn parse_file(file_path: &str, forced_format: Option<Format>) -> Result<Value> {
+    let content = if file_path == "-" {
+        let mut input = String::new();
+        io::stdin()
+            .read_to_string(&mut input)
+            .context("Failed to read from stdin")?;
+        input
+    } else {
+        fs::read_to_string(file_path).with_context(|| format!("Failed to read file: {file_path}"))?
+    };
+
+    parse_content(file_path, &content, forced_format)
 }
 
 fn resolve_path<'a>(value: &'a Value, dotted_path: &str) -> Result<&'a Value> {
@@ -262,13 +290,55 @@ fn apply_base64_transform(input: &str, decode: bool, encode: bool) -> Result<Str
     }
 }
 
+fn interactive_usage_tutorial() -> &'static str {
+    "No input detected.
+
+Mini tutorial:
+  confctl config.yaml clubs.0.name
+  confctl config.toml
+  cat config.json | confctl user.name
+  curl -s https://api.github.com/users | confctl
+  curl -s https://api.github.com/users | confctl 0.login --format json
+
+Tip: use '-' to force stdin explicitly:
+  curl -s https://api.github.com/users | confctl - 0.login
+
+Run 'confctl --help' for full usage."
+}
+
+fn resolve_input(file: Option<String>, path: Option<String>, stdin_is_tty: bool) -> Result<(String, Option<String>)> {
+    match (file, path) {
+        (Some(file), Some(path)) => Ok((file, Some(path))),
+        (Some(file), None) => {
+            if file == "-" {
+                return Ok((file, None));
+            }
+
+            if !stdin_is_tty && !Path::new(&file).exists() {
+                Ok(("-".to_string(), Some(file)))
+            } else {
+                Ok((file, None))
+            }
+        }
+        (None, maybe_path) => {
+            if stdin_is_tty {
+                bail!(interactive_usage_tutorial());
+            }
+            Ok(("-".to_string(), maybe_path))
+        }
+    }
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let use_color = atty::is(atty::Stream::Stdout);
+    let stdin_is_tty = atty::is(atty::Stream::Stdin);
 
-    let value = parse_file(&cli.file)?;
+    let (file, path) = resolve_input(cli.file, cli.path, stdin_is_tty)?;
 
-    match cli.path {
+    let value = parse_file(&file, cli.format)?;
+
+    match path {
         Some(path) => {
             let result = resolve_path(&value, &path)?;
             let output = format_value(result);
@@ -301,60 +371,4 @@ fn main() -> Result<()> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn test_resolve_simple_key() {
-        let data = json!({"club": {"name": "Vasco da Gama", "founded": 1898}});
-        let result = resolve_path(&data, "club.name").unwrap();
-        assert_eq!(result, &json!("Vasco da Gama"));
-    }
-
-    #[test]
-    fn test_resolve_numeric_index() {
-        let data = json!({"players": [{"name": "Edmundo"}, {"name": "Juninho Pernambucano"}]});
-        let result = resolve_path(&data, "players.1.name").unwrap();
-        assert_eq!(result, &json!("Juninho Pernambucano"));
-    }
-
-    #[test]
-    fn test_resolve_missing_key() {
-        let data = json!({"club": {"name": "Vasco da Gama"}});
-        let result = resolve_path(&data, "club.stadium");
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Key not found"));
-    }
-
-    #[test]
-    fn test_resolve_index_out_of_bounds() {
-        let data = json!({"titles": [1, 2, 3]});
-        let result = resolve_path(&data, "titles.5");
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("out of bounds"));
-    }
-
-    #[test]
-    fn test_resolve_scalar_traversal() {
-        let data = json!({"name": "Vasco da Gama"});
-        let result = resolve_path(&data, "name.something");
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("scalar value"));
-    }
-
-    #[test]
-    fn test_format_string_no_quotes() {
-        assert_eq!(format_value(&json!("Edmundo")), "Edmundo");
-    }
-
-    #[test]
-    fn test_format_number() {
-        assert_eq!(format_value(&json!(9)), "9");
-    }
-
-    #[test]
-    fn test_format_bool() {
-        assert_eq!(format_value(&json!(true)), "true");
-    }
-}
+mod tests;
