@@ -2,6 +2,10 @@
 
 Inspired by [jq](https://jqlang.github.io/jq/), `confctl` brings the same idea of querying structured data to configuration files. Instead of JSON streams, it targets the files engineers actually use day-to-day — JSON, YAML, and TOML — with a simple dotted path syntax and no filter language to learn.
 
+## Demo
+
+![confctl demo](data/main_video.gif)
+
 ```bash
 confctl config.yaml clubs.0.players.1.name
 # Juninho Pernambucano
