@@ -25,7 +25,7 @@ curl -fsSL https://raw.githubusercontent.com/tarcisiomiranda/confctl/main/instal
 Or install a specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/tarcisiomiranda/confctl/main/install.sh | bash -s v0.0.2
+curl -fsSL https://raw.githubusercontent.com/tarcisiomiranda/confctl/main/install.sh | bash -s v0.0.3
 ```
 
 ### Available binaries
@@ -49,7 +49,7 @@ RUN chmod +x /usr/local/bin/confctl
 Or pin to a specific version for reproducibility:
 
 ```dockerfile
-ADD https://github.com/tarcisiomiranda/confctl/releases/download/v0.0.2/confctl-linux-amd64 \
+ADD https://github.com/tarcisiomiranda/confctl/releases/download/v0.0.3/confctl-linux-amd64 \
     /usr/local/bin/confctl
 RUN chmod +x /usr/local/bin/confctl
 ```
@@ -61,11 +61,11 @@ Works with any base image (`debian`, `alpine`, `ubuntu`, `scratch`-based) no apt
 ## Usage
 
 ```
-confctl <file> [path]
+confctl [file|-] [path] [--format <json|yaml|toml|env>]
 ```
 
 - **With path**  extracts the value at the dotted path
-- **Without path**  sprints the entire file as normalized JSON
+- **Without path**  prints the entire input as normalized JSON
 
 ### Extracting values
 
@@ -83,6 +83,27 @@ confctl config.toml clubs.2.titles.champions_league
 
 confctl config.yaml clubs.1.stadium
 # Emirates Stadium
+```
+
+### Reading from stdin (curl)
+
+When data is piped into `confctl`, stdin is used automatically.
+
+```bash
+curl -s https://api.github.com/users | confctl
+curl -s https://api.github.com/users | confctl 0.login
+```
+
+You can still use `-` explicitly:
+
+```bash
+curl -s https://api.github.com/users | confctl - 0.login
+```
+
+If format auto-detection is ambiguous, pass `--format`:
+
+```bash
+curl -s https://api.github.com/users | confctl 0.login --format json
 ```
 
 ### Printing the whole file
@@ -125,8 +146,9 @@ confctl config.json missing.key
 | `.json` | JSON |
 | `.yaml`, `.yml` | YAML |
 | `.toml` | TOML |
+| `.env` | ENV |
 
-Format is detected automatically from the file extension.
+Format is detected automatically from the file extension. For `stdin` (`-`) or extensionless files, `confctl` also tries to auto-detect content and supports `--format`.
 
 ## Path syntax
 

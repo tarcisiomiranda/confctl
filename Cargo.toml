@@ -1,8 +1,8 @@
 [package]
 name = "confctl"
-version = "0.0.2"
+version = "0.0.3"
 edition = "2021"
-description = "A simplified jq for configuration files (JSON, YAML, TOML)"
+description = "CLI for querying configuration files (JSON, YAML, TOML)"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
