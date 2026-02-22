@@ -1,0 +1,19 @@
+---
+services:
+  confctl-testdata:
+    image: docker.io/library/alpine:latest
+    container_name: confctl-testdata
+    volumes:
+      - ./target/release/confctl:/usr/local/bin/confctl:ro
+      - ./testdata/config.toml:/data/config.toml:ro
+    working_dir: /data
+    entrypoint: ["/usr/local/bin/confctl", "config.toml"]
+
+  confctl-devops:
+    image: docker.io/library/alpine:latest
+    container_name: confctl-devops
+    volumes:
+      - ./target/release/confctl:/usr/local/bin/confctl:ro
+      - ./testdata/app.env:/data/app.env:ro
+    working_dir: /data
+    entrypoint: ["/usr/local/bin/confctl", "app.env"]

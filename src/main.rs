@@ -270,7 +270,7 @@ fn colorize_json(value: &Value, indent: usize) -> String {
 
 fn format_value_colored(value: &Value) -> String {
     match value {
-        Value::String(s) => s.clone(),
+        Value::String(s) => s.green().to_string(),
         Value::Null => "null".bright_black().bold().to_string(),
         Value::Bool(b) => b.to_string().white().to_string(),
         Value::Number(n) => n.to_string().white().to_string(),

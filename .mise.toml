@@ -1,6 +1,9 @@
 [tools]
 rust = "1.91.1"
 
+[settings]
+env_shell_expand = true
+
 [env]
 _.path = ["$HOME/.cargo/bin", "$PATH"]
 
