@@ -154,6 +154,25 @@ confctl .env -r
 
 Works with any format and recurses into nested objects and arrays. `confctl diff` masks secrets by default (`--show-secrets` reveals them there).
 
+### Editing .env files (`set` / `unset`)
+
+Add, update, or remove keys **in place** without opening the file — comments, blank lines, ordering, `export` prefixes, and inline `#` comments are all preserved. Designed for scripts and AI agents that need to mutate a `.env` without reading its (possibly sensitive) contents.
+
+```bash
+confctl set .env DB_HOST=10.0.0.5 NEW_FLAG=on     # add or update, several at once
+confctl set .env GREETING="hello world"           # values with spaces get quoted
+confctl unset .env DEBUG OLD_KEY                  # remove keys
+```
+
+```text
+✓ updated DB_HOST
+✓ added NEW_FLAG
+✓ removed DEBUG
+· OLD_KEY not found (nothing to remove)
+```
+
+Rules: `set` creates the file if missing and appends new keys at the end; `unset` on a missing key is a no-op that still exits 0 (idempotent); commented-out lines like `# DB_HOST=old` are never matched.
+
 ### Error handling
 
 ```bash

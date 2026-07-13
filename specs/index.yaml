@@ -39,9 +39,13 @@ domains:
     file: transform.yaml
     summary: "Optional base64 encode/decode step applied to the resolved value before printing."
 
+  - name: edit
+    file: edit.yaml
+    summary: "In-place .env editing (`set` / `unset`) that preserves comments, ordering, and export prefixes."
+
   - name: vault
     file: vault.yaml
-    summary: "Push/pull encrypted `.env`/secret files to a Bunker Vault server via a client-side Argon2id + XChaCha20-Poly1305 zero-knowledge flow."
+    summary: "Push/pull secret files to remote stores (bunker zero-knowledge, HashiCorp Vault KV v2, Google Secret Manager via ADC) behind a Backend trait."
 
   - name: build
     file: build.yaml

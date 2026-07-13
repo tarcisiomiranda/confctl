@@ -1,0 +1,56 @@
+domain: edit
+summary: "In-place .env editing via `confctl set` / `confctl unset` — line-based rewrites that preserve comments, blank lines, ordering, `export ` prefixes, and inline ` # comments`. Built for tooling/AI agents that must mutate a .env without reading it."
+last_updated: "2026-07-12"
+
+modules:
+  - path: src/env_edit.rs
+    role: "SetCli / UnsetCli clap args, pure set_key/unset_key line editors, and the run_set/run_unset file I/O wrappers."
+
+functions:
+  - symbol: set_key
+    path: src/env_edit.rs
+    signature: "pub(crate) fn set_key(content: &str, key: &str, value: &str) -> (String, SetOutcome)"
+    role: "Rewrites every non-comment line assigning the key (keeps duplicates as duplicates); appends `KEY=VALUE` at the end when absent."
+  - symbol: unset_key
+    path: src/env_edit.rs
+    signature: "pub(crate) fn unset_key(content: &str, key: &str) -> (String, bool)"
+    role: "Drops every line assigning the key; comments mentioning the key survive. Missing key is a no-op (returns false)."
+  - symbol: replace_value
+    path: src/env_edit.rs
+    role: "Rebuilds one line with the new value, preserving indentation, `export ` prefix, and a trailing ` # comment`."
+  - symbol: render_value
+    path: src/env_edit.rs
+    role: "Double-quotes the value when empty or containing whitespace / `#` / `\"`; verbatim otherwise."
+  - symbol: parse_pair
+    path: src/env_edit.rs
+    role: "Splits KEY=VALUE and enforces the `[A-Za-z0-9_]` key charset."
+
+cli_surface:
+  - subcommand: "set"
+    path: src/main.rs
+    role: "confctl set <file> KEY=VALUE [KEY2=VALUE2 ...] — add or update; creates the file when missing. Prints `added`/`updated` per key."
+  - subcommand: "unset"
+    path: src/main.rs
+    role: "confctl unset <file> KEY [KEY2 ...] — remove keys. Missing keys are reported but exit 0 (idempotent for scripting)."
+
+behaviours:
+  - name: comment-preserving
+    path: src/env_edit.rs
+    role: "Line-based editing, never parse→reserialize: `#` full-line comments, inline ` # comments`, blank lines, and ordering are untouched."
+  - name: idempotent-unset
+    path: src/env_edit.rs
+    role: "unset on an absent key succeeds with a note — safe to re-run from scripts/agents."
+  - name: commented-keys-ignored
+    path: src/env_edit.rs
+    role: "`# KEY=old` never matches: commented-out assignments are not keys."
+
+tests:
+  - name: env_edit::tests (9 cases)
+    path: src/env_edit.rs
+    covers: "Update-in-place, inline-comment + export preservation, append-at-end, auto-quoting, comment-safe unset, idempotent missing-key unset, key charset validation."
+
+related:
+  - domain: cli
+    why: "Set/Unset are Command variants dispatched from main()."
+  - domain: parser
+    why: "Round-trips with parse_env_format: quoted values written by set are unquoted on read."

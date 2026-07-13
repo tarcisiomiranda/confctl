@@ -9,6 +9,7 @@ use colored::Colorize;
 use serde_json::{Map, Value};
 
 mod diff;
+mod env_edit;
 mod vault;
 
 #[derive(Parser)]
@@ -43,6 +44,12 @@ struct Cli {
 enum Command {
     /// Compare two config files with a human-friendly diff.
     Diff(diff::DiffCli),
+
+    /// Add or update KEY=VALUE entries in a .env file, preserving comments.
+    Set(env_edit::SetCli),
+
+    /// Remove keys from a .env file, preserving comments.
+    Unset(env_edit::UnsetCli),
 
     /// Push/pull secret files to a Bunker Vault server.
     Vault(vault::cli::VaultCli),
@@ -427,6 +434,8 @@ fn main() -> Result<()> {
                 }
                 return Ok(());
             }
+            Command::Set(set_cli) => return env_edit::run_set(set_cli),
+            Command::Unset(unset_cli) => return env_edit::run_unset(unset_cli),
             Command::Vault(vault_cli) => return vault::cli::run(vault_cli),
         }
     }
