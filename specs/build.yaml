@@ -3,7 +3,7 @@ summary: "Build targets, mise tasks, Dockerfile, install.sh, and the GitHub Acti
 last_updated: "2026-07-12"
 
 version:
-  current: "0.0.4"
+  current: "0.0.5"
   sources:
     - path: VERSION
       role: "Single line — bumped on release via `chore(release)` commits."

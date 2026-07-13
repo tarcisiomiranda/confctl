@@ -13,7 +13,7 @@ last_updated: "2026-07-12"
 project:
   name: confctl
   kind: rust-cli
-  version: "0.0.4"             # mirrors VERSION and Cargo.toml
+  version: "0.0.5"             # mirrors VERSION and Cargo.toml
   entrypoint: src/main.rs
   binary: confctl
   description: "Lightweight CLI for querying structured config files (JSON, YAML, TOML, ENV) via dotted paths."

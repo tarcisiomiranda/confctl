@@ -2,6 +2,21 @@
 # Each release can have "title" and "body"
 # The script accepts keys like "v0.0.3", "0.0.3", "v0-0-3" or "0-0-3"
 
+[releases."0.0.5"]
+title = "In-place .env Editing"
+body = """
+## New Features
+
+- **`confctl set <file> KEY=VALUE ...`** — add or update keys in a .env file in place
+  - Preserves comments, blank lines, ordering, `export` prefixes, and inline `#` comments
+  - Auto-quotes values containing spaces or `#`; creates the file when missing
+- **`confctl unset <file> KEY ...`** — remove keys
+  - Idempotent: missing keys are reported but exit 0
+  - Commented-out lines (`# KEY=old`) are never matched
+
+Built for scripts and AI agents that need to mutate a .env without reading its contents.
+"""
+
 [releases."0.0.4"]
 title = "Vault Backends, Diff, and Secret Redaction"
 body = """
