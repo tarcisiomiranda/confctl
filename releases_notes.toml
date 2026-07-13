@@ -2,6 +2,27 @@
 # Each release can have "title" and "body"
 # The script accepts keys like "v0.0.3", "0.0.3", "v0-0-3" or "0-0-3"
 
+[releases."0.0.4"]
+title = "Vault Backends, Diff, and Secret Redaction"
+body = """
+## New Features
+
+- **`confctl vault` — remote secret storage** behind a unified CLI
+  - `bunker` backend: zero-knowledge client-side encryption (Argon2id + XChaCha20-Poly1305)
+  - `hcp` backend: HashiCorp Vault KV v2
+  - `gcp` backend: Google Secret Manager using ambient ADC (`gcloud auth application-default login`) — no separate login flow
+  - `push` auto-names secrets `{dir}-{file}-{YYYY-MM-DD}` when `--name` is omitted
+- **`confctl diff`** — human-friendly structural diff for JSON/YAML/TOML/ENV with secret masking by default (`--show-secrets` to reveal)
+- **`-r` / `--redact`** — mask sensitive values before printing
+  - By key: PASS, PWD, SECRET, TOKEN, KEY, HASH, CREDENTIAL
+  - By value shape: GitHub/GitLab/Stripe/Slack tokens, `sk-*` API keys, AWS `AKIA*`, Google `AIza*`, JWTs, PEM blocks
+
+## Improvements
+
+- `specs/` directory with a per-domain YAML inventory of the codebase
+- Green coloring for string values in TTY output
+"""
+
 [releases."0.0.3"]
 title = "Stdin UX + Format Override"
 body = """

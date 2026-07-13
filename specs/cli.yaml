@@ -1,0 +1,88 @@
+domain: cli
+summary: "Argument parsing, stdin/tty heuristics, and the main() dispatch that wires every other domain together."
+last_updated: "2026-07-12"
+
+modules:
+  - path: src/main.rs
+    role: "Declares the Cli struct, Format enum, resolve_input heuristic, interactive tutorial, and main()."
+
+types:
+  - symbol: Cli
+    path: src/main.rs#L11-L29
+    kind: struct
+    role: "clap Parser — holds optional `file`, `path`, `--format`, `-d/--decode`, `-e/--encode`."
+  - symbol: Format
+    path: src/main.rs#L31-L37
+    kind: enum
+    role: "Supported format variants (Json, Yaml, Toml, Env) — used by --format and by detect_format."
+
+functions:
+  - symbol: resolve_input
+    path: src/main.rs#L310-L335
+    signature: "fn resolve_input(file: Option<String>, path: Option<String>, stdin_is_tty: bool) -> Result<(String, Option<String>)>"
+    role: "Decides whether a single positional argument is a file or a path, based on stdin being piped and the file existing."
+  - symbol: interactive_usage_tutorial
+    path: src/main.rs#L294-L308
+    signature: "fn interactive_usage_tutorial() -> &'static str"
+    role: "Static help text shown when confctl is invoked with no file and no piped stdin."
+  - symbol: main
+    path: src/main.rs#L337-L376
+    signature: "fn main() -> Result<()>"
+    role: "Entry point — parses CLI, detects tty, runs parser → resolver → transform → output pipeline."
+
+cli_surface:
+  - arg: file
+    kind: positional
+    path: src/main.rs#L18
+    role: "Path to a config file, or `-` for stdin. Optional; omitted when stdin is piped."
+  - arg: path
+    kind: positional
+    path: src/main.rs#L19
+    role: "Dotted path to extract from the parsed value. Omitted means dump the whole file."
+  - flag: "--format"
+    path: src/main.rs#L21-L22
+    role: "Overrides auto-detected format. Accepts json|yaml|toml|env."
+  - flag: "--decode"
+    short: "-d"
+    path: src/main.rs#L24-L25
+    role: "Base64-decode the resolved value before printing. Conflicts with --encode."
+  - flag: "--encode"
+    short: "-e"
+    path: src/main.rs#L27-L28
+    role: "Base64-encode the resolved value (or the full JSON dump) before printing. Conflicts with --decode."
+  - flag: "--redact"
+    short: "-r"
+    path: src/main.rs#L33-L36
+    role: "Opt-in masking: keys matching PASS, PWD, SECRET, TOKEN, KEY, HASH, CREDENTIAL and secret-shaped values (ghp_*, sk-*, AKIA*, JWT, PEM) print as <redacted>. Safe to paste into logs/AI chats."
+
+behaviours:
+  - name: stdin-first
+    path: src/main.rs#L310-L335
+    role: "If stdin is piped and the single positional does not exist as a file, treat it as the `path` and read stdin."
+  - name: tty-aware-coloring
+    path: src/main.rs#L339-L354
+    role: "Coloured output only when stdout is a TTY (uses atty)."
+
+tests:
+  - name: test_resolve_input_no_file_uses_stdin_when_piped
+    path: src/tests.rs#L80-L84
+    covers: "No positional + piped stdin → uses `-` as file."
+  - name: test_resolve_input_single_arg_becomes_path_when_piped_and_file_missing
+    path: src/tests.rs#L86-L91
+    covers: "Single positional that is not a real file + piped stdin → treated as path."
+  - name: test_resolve_input_keeps_explicit_file_when_present
+    path: src/tests.rs#L93-L99
+    covers: "Single positional that exists on disk is preserved as the file argument."
+  - name: test_resolve_input_no_file_and_interactive_shows_tutorial
+    path: src/tests.rs#L101-L105
+    covers: "No positional + TTY stdin → returns the mini-tutorial error."
+
+related:
+  - domain: parser
+    why: "main() calls parse_file with the resolved file and optional --format override."
+  - domain: resolver
+    why: "main() calls resolve_path when a dotted path is provided."
+  - domain: output
+    why: "main() chooses between format_value / format_value_colored / colorize_json depending on TTY."
+  - domain: transform
+    why: "--encode and --decode flags wire into apply_base64_transform after resolution."

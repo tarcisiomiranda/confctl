@@ -1,0 +1,105 @@
+domain: parser
+summary: "Format detection and content parsing for JSON, YAML, TOML, and .env files — always normalised to serde_json::Value."
+last_updated: "2026-04-23"
+
+modules:
+  - path: src/main.rs
+    role: "Houses detect_format, looks_like_env_format, parse_env_format, parse_content, and parse_file."
+
+functions:
+  - symbol: detect_format
+    path: src/main.rs#L61-L104
+    signature: "fn detect_format(file_path: &str, content: &str, forced_format: Option<Format>) -> Result<Format>"
+    role: "Resolves the effective Format: explicit --format > filename (.env / .env.*) > extension > content-based heuristics."
+  - symbol: looks_like_env_format
+    path: src/main.rs#L39-L59
+    signature: "fn looks_like_env_format(content: &str) -> bool"
+    role: "Heuristic: every non-empty non-comment line is KEY=VALUE with an alnum/underscore key."
+  - symbol: parse_env_format
+    path: src/main.rs#L106-L143
+    signature: "fn parse_env_format(content: &str) -> Value"
+    role: "Parses KEY=VALUE text into a JSON object, stripping matching quotes and coercing int/float/bool."
+  - symbol: parse_content
+    path: src/main.rs#L145-L164
+    signature: "fn parse_content(file_path: &str, content: &str, forced_format: Option<Format>) -> Result<Value>"
+    role: "Delegates to serde_json / serde_yaml / toml / parse_env_format based on detected Format; TOML is routed through JSON to normalise."
+  - symbol: parse_file
+    path: src/main.rs#L166-L179
+    signature: "fn parse_file(file_path: &str, forced_format: Option<Format>) -> Result<Value>"
+    role: "Reads from disk or stdin (`-`) then hands off to parse_content."
+
+formats:
+  - name: json
+    extensions: [".json"]
+    parser: "serde_json::from_str::<Value>"
+    role: "Native target representation — all other formats are normalised to this."
+  - name: yaml
+    extensions: [".yaml", ".yml"]
+    parser: "serde_yaml::from_str::<Value>"
+    role: "Parsed straight into serde_json::Value."
+  - name: toml
+    extensions: [".toml"]
+    parser: "toml::from_str -> serde_json round-trip"
+    role: "Parsed as toml::Value then reserialised via JSON to unify on serde_json::Value."
+  - name: env
+    extensions: [".env"]
+    filename_rules: [".env", ".env.*"]
+    parser: "parse_env_format (custom)"
+    role: "Line-oriented KEY=VALUE; also matched by content heuristic for extensionless input like /etc/os-release."
+
+detection_order:
+  - step: 1
+    rule: "If --format is passed, use it unconditionally."
+    path: src/main.rs#L62-L64
+  - step: 2
+    rule: "Filename `.env` or starts with `.env.` → Env."
+    path: src/main.rs#L69-L71
+  - step: 3
+    rule: "Extension match (case-insensitive): json / yaml / yml / toml / env."
+    path: src/main.rs#L78-L87
+  - step: 4
+    rule: "No extension → try looks_like_env_format, then JSON, then TOML, then YAML; otherwise fail."
+    path: src/main.rs#L88-L102
+
+tests:
+  - name: test_detect_format_no_extension_json
+    path: src/tests.rs#L59-L63
+    covers: "Extensionless input that is valid JSON detects as Format::Json."
+  - name: test_detect_format_no_extension_toml
+    path: src/tests.rs#L66-L70
+    covers: "Extensionless input that is valid TOML detects as Format::Toml."
+  - name: test_detect_format_forced_overrides_extension
+    path: src/tests.rs#L73-L77
+    covers: "--format takes precedence even when the extension says otherwise."
+  - name: test_github_users_api_query
+    path: src/tests.rs#L107-L130
+    covers: "Live curl → parse_content with forced JSON (marked `#[ignore]` — requires internet)."
+
+fixtures:
+  - path: testdata/config.json
+    role: "JSON sample with a nested `clubs` array used across parser/resolver tests and README examples."
+  - path: testdata/config.yaml
+    role: "YAML mirror of the same dataset."
+  - path: testdata/config.toml
+    role: "TOML mirror of the same dataset."
+  - path: testdata/app.env
+    role: "Example .env file used to exercise the env parser."
+  - path: testdata/os-release
+    role: "Extensionless KEY=VALUE file, exercises env content heuristic."
+  - path: testdata/docker-compose.yml
+    role: "YAML sample used to test dotted-path access into Docker Compose service definitions."
+
+dependencies:
+  - crate: serde_json
+    role: "Canonical Value type and JSON parsing."
+  - crate: serde_yaml
+    version_note: "Pinned to 0.9 in Cargo.toml."
+    role: "YAML parsing into serde_json::Value."
+  - crate: toml
+    role: "TOML parsing; output is serialised back through JSON to converge on serde_json::Value."
+
+related:
+  - domain: cli
+    why: "parse_file is invoked from main() with the file and optional --format override."
+  - domain: resolver
+    why: "Produces the Value that resolve_path walks."

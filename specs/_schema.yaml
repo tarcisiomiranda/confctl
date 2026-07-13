@@ -1,0 +1,68 @@
+# Canonical schema for a confctl domain spec.
+# Copy this file to specs/{domain}.yaml and fill in what applies.
+# Omit any section that does not apply to the domain — do not keep empty stubs.
+#
+# Field conventions:
+#   - `path:` must point at a real file, relative to the repo root.
+#     Optionally add `#Lstart-Lend` to hint at a line range.
+#   - `symbol:` is the Rust identifier (fn/struct/enum/mod) as it appears in source.
+#   - `last_updated:` ISO date (YYYY-MM-DD). Bump on every edit.
+
+domain: "{{domain-name}}"
+summary: "{{one-line description of what this domain does}}"
+last_updated: "YYYY-MM-DD"
+
+# Source modules that implement this domain.
+modules:
+  - path: src/main.rs
+    role: "{{what this module contributes to the domain}}"
+
+# Public-ish functions inside the domain.
+functions:
+  - symbol: example_fn
+    path: src/main.rs
+    signature: "fn example_fn(x: &str) -> Result<Value>"
+    role: "{{one line — what it does}}"
+
+# Rust types (structs/enums) central to the domain.
+types:
+  - symbol: Example
+    path: src/main.rs
+    kind: struct   # or enum
+    role: "{{one line}}"
+
+# CLI surface exposed by this domain (flags, positional args, env vars).
+cli_surface:
+  - flag: "--example"
+    short: "-e"
+    path: src/main.rs
+    role: "{{one line}}"
+
+# Input/output formats this domain understands or produces.
+formats:
+  - name: json
+    extensions: [".json"]
+    parser: "serde_json"
+    role: "{{one line}}"
+
+# Unit/integration tests covering this domain.
+tests:
+  - name: test_example
+    path: src/tests.rs
+    covers: "{{what behaviour is asserted}}"
+
+# External fixtures exercised by this domain.
+fixtures:
+  - path: testdata/config.json
+    role: "{{one line}}"
+
+# Build/release artefacts tied to this domain (only for the `build` spec).
+artefacts:
+  - name: confctl-linux-amd64
+    target: x86_64-unknown-linux-musl
+    role: "{{one line}}"
+
+# Cross-domain notes — call out dependencies on other specs.
+related:
+  - domain: "{{other-domain}}"
+    why: "{{one line}}"

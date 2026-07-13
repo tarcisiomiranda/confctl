@@ -1,6 +1,6 @@
 [package]
 name = "confctl"
-version = "0.0.3"
+version = "0.0.4"
 edition = "2021"
 description = "CLI for querying configuration files (JSON, YAML, TOML)"
 
@@ -14,3 +14,14 @@ anyhow = "1"
 colored = "2"
 atty = "0.2"
 base64 = "0.22"
+ureq = { version = "2", default-features = false, features = ["json", "tls"] }
+argon2 = "0.5"
+chacha20poly1305 = "0.10"
+rand = "0.8"
+zeroize = "1"
+keyring = { version = "3", features = ["linux-native"] }
+rpassword = "7"
+dirs = "5"
+uuid = { version = "1", features = ["serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "1"

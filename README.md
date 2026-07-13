@@ -129,6 +129,31 @@ confctl config.toml
 }
 ```
 
+### Redacting secrets (`-r` / `--redact`)
+
+Masks sensitive values with `<redacted>`, keeping everything else visible. Output is safe to paste into logs, issues, or AI chats — often the bug is in the non-sensitive values anyway.
+
+Two detection layers:
+
+- **By key** (case-insensitive substring): `PASS`, `PWD`, `SECRET`, `TOKEN`, `KEY`, `HASH`, `CREDENTIAL`
+- **By value shape**, regardless of key: GitHub tokens (`ghp_*`, `github_pat_*`, …), GitLab (`glpat-*`), Stripe (`sk_live_*`, …), Slack (`xoxb-*`, …), OpenAI/Anthropic-style (`sk-*`), AWS access key IDs (`AKIA*`), Google API keys (`AIza*`), npm/PyPI tokens, JWTs (`eyJ…`), PEM blocks (`-----BEGIN`)
+
+```bash
+confctl .env -r
+```
+
+```json
+{
+  "API_KEY": "<redacted>",
+  "DATABASE_HOST": "192.0.2.9",
+  "DATABASE_PORT": 5432,
+  "DEBUG": true,
+  "POSTGRES_PASSWORD": "<redacted>"
+}
+```
+
+Works with any format and recurses into nested objects and arrays. `confctl diff` masks secrets by default (`--show-secrets` reveals them there).
+
 ### Error handling
 
 ```bash
@@ -158,6 +183,104 @@ Format is detected automatically from the file extension. For `stdin` (`-`) or e
 | `players.0.name` | Array index + key |
 | `titles.la_liga` | Deep key |
 | `season` | Top-level key (returns the whole object) |
+
+---
+
+## Vault (remote secrets)
+
+`confctl vault` pushes and pulls secret files (`.env`, service-account JSONs, ad-hoc blobs) to a remote secret store. Unified CLI over multiple backends:
+
+| Backend | Flag | Auth model |
+| --- | --- | --- |
+| `bunker` | `--backend bunker` | Zero-knowledge: Argon2id + XChaCha20-Poly1305, encrypted client-side. |
+| `hcp` | `--backend hcp` | HashiCorp Vault KV v2. `X-Vault-Token` header. |
+| `gcp` | `--backend gcp` | Google Secret Manager via ambient ADC (`gcloud auth application-default login`). |
+| `aws` | `--backend aws` | AWS Secrets Manager. *(planned)* |
+| `azure` | `--backend azure` | Azure Key Vault. *(planned)* |
+
+### Config lookup
+
+Non-secret config lives in TOML, looked up in this order (first existing wins):
+
+1. `$CONFCTL_CONFIG`
+2. `~/.config/confctl/vault.toml` — written by `vault login`
+3. `/etc/confctl/vault.toml` — system-wide default, read-only
+
+Secrets never land in `/etc/` — cached sessions go to the OS keyring (Secret Service / Keychain / Credential Manager), with a chmod-0600 file fallback under `~/.config/confctl/`.
+
+### Auth: three ways to point at a backend
+
+**(a) System config file** (`/etc/confctl/vault.toml`) — no login needed, reads credentials from files you pre-place:
+
+```toml
+backend = "hcp"
+
+[hcp]
+addr = "http://192.0.2.2:8200"
+mount = "secret"
+token_file = "/etc/confctl/hcp-token"   # chmod 0600
+```
+
+**(b) Environment variables** — upstream conventions (`VAULT_ADDR`, `VAULT_TOKEN`, `AWS_*`, `GOOGLE_APPLICATION_CREDENTIALS`, `AZURE_*`) work when set:
+
+```bash
+export VAULT_TOKEN='hvs.…'
+confctl vault --backend hcp login --endpoint http://192.0.2.2:8200
+```
+
+**(c) Interactive login** — prompts for whatever's missing (token, password, etc.) and caches it in the OS keyring:
+
+```bash
+confctl vault --backend hcp login --endpoint http://192.0.2.2:8200
+# Vault token: ***
+```
+
+### Commands
+
+```bash
+confctl vault login    [--backend X] [--endpoint URL] [--identity NAME]
+confctl vault status
+confctl vault push     <file|-> [--name NAME] [--mime TYPE] [--labels a,b] [--overwrite]
+confctl vault list     [--json]
+confctl vault pull     <name> [--id UUID] [--out PATH|-] [--force]
+confctl vault rm       <name> [--yes]
+confctl vault logout
+```
+
+`<file|->` reads a local path or stdin (`-`). `pull --out -` writes decrypted bytes to stdout. `--backend` is global and overrides the config file.
+
+### Automatic secret names
+
+`push` without `--name` generates `{current-dir}-{filename}-{YYYY-MM-DD}`, slugged to `[A-Za-z0-9_-]` (the strictest backend charset). Pushing `.env` from `/srv/myapp` on 2026-07-12 stores `myapp-env-2026-07-12` — a dated snapshot per push, no command memorization needed. Pass `--name` to override.
+
+```bash
+confctl vault push .env                       # → myapp-env-2026-07-12
+confctl vault push .env --name myapp-env      # fixed name; --overwrite updates it
+```
+
+### GCP Secret Manager quickstart
+
+Uses the Application Default Credentials you already have from `gcloud` — no separate login flow:
+
+```bash
+gcloud auth application-default login          # once, if not already done
+confctl vault login --backend gcp --endpoint my-project-id
+confctl vault push .env                        # → creates secret myapp-env-2026-07-12
+confctl vault list
+confctl vault pull myapp-env-2026-07-12 --out .env
+```
+
+The project is saved to `vault.toml`; omit `--endpoint` to pick it up from `GOOGLE_CLOUD_PROJECT` or `gcloud config get-value project`:
+
+```toml
+backend = "gcp"
+
+[gcp]
+project = "my-project-id"
+# credentials_file = "/path/to/adc.json"   # optional explicit ADC file
+```
+
+Credential discovery order: `CLOUDSDK_AUTH_ACCESS_TOKEN` → `gcp.credentials_file` → `GOOGLE_APPLICATION_CREDENTIALS` → gcloud ADC file → `gcloud` CLI → GCE metadata server. Filename and MIME type are preserved via secret annotations, so `pull` restores the original file name.
 
 ---
 

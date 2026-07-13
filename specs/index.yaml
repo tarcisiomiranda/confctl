@@ -1,0 +1,48 @@
+# Index of confctl domain specs.
+# Keep descriptions to one line. Link order reflects the data flow:
+# CLI → parser → resolver → output, with transform as an optional post-step,
+# and build as cross-cutting infra.
+
+last_updated: "2026-07-12"
+
+# Domain ordering below reflects the two data flows:
+#   1. Local querying:  cli → parser → resolver → output (+ transform)
+#   2. Remote vault:    cli → vault (auth → backend → crypto → http)
+# `build` is cross-cutting infra that ships both.
+
+project:
+  name: confctl
+  kind: rust-cli
+  version: "0.0.4"             # mirrors VERSION and Cargo.toml
+  entrypoint: src/main.rs
+  binary: confctl
+  description: "Lightweight CLI for querying structured config files (JSON, YAML, TOML, ENV) via dotted paths."
+
+domains:
+  - name: cli
+    file: cli.yaml
+    summary: "Argument parsing, stdin/tty heuristics, and the main() dispatch that wires every other domain together."
+
+  - name: parser
+    file: parser.yaml
+    summary: "Format detection and content parsing for JSON, YAML, TOML, and .env files — always normalised to serde_json::Value."
+
+  - name: resolver
+    file: resolver.yaml
+    summary: "Dotted-path navigation over parsed values, including numeric array indices and descriptive error messages."
+
+  - name: output
+    file: output.yaml
+    summary: "Plain and jq-style coloured rendering of scalars, objects and arrays for terminal vs piped stdout."
+
+  - name: transform
+    file: transform.yaml
+    summary: "Optional base64 encode/decode step applied to the resolved value before printing."
+
+  - name: vault
+    file: vault.yaml
+    summary: "Push/pull encrypted `.env`/secret files to a Bunker Vault server via a client-side Argon2id + XChaCha20-Poly1305 zero-knowledge flow."
+
+  - name: build
+    file: build.yaml
+    summary: "Build targets, mise tasks, Dockerfile, install.sh, and the GitHub Actions CI/release pipelines."

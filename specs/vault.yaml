@@ -1,0 +1,330 @@
+domain: vault
+summary: "Push/pull secret files to remote stores behind a Backend trait. Implemented: bunker (zero-knowledge Argon2id + XChaCha20-Poly1305), hcp (HashiCorp Vault KV v2), gcp (Google Secret Manager via ambient ADC). Planned: aws, azure. Push auto-names secrets `{dir}-{file}-{date}` unless --name is given."
+last_updated: "2026-07-12"
+
+modules:
+  - path: src/vault/mod.rs
+    role: "Module root — re-exports cli, client, config, crypto, storage."
+  - path: src/vault/cli.rs
+    role: "Clap subcommand (VaultCli / VaultCommand), Session orchestration, all user-facing commands."
+  - path: src/vault/client.rs
+    role: "Sync HTTP client against bunker-vault's REST API; wire DTOs; 401-aware error mapping."
+  - path: src/vault/config.rs
+    role: "Non-secret config at ~/.config/confctl/vault.toml (url, email, kdf_salt) with chmod 0600."
+  - path: src/vault/crypto.rs
+    role: "Argon2id key derivation + auth_hash + XChaCha20-Poly1305 AEAD. Parameters pinned against vault-core."
+  - path: src/vault/storage.rs
+    role: "SecretStore trait; OS keyring (keyring crate) with a stderr-warning file fallback at ~/.config/confctl/vault-secrets.toml."
+  - path: src/vault/backends/mod.rs
+    role: "Backend trait, request/response structs, and open() dispatch by BackendKind."
+  - path: src/vault/backends/bunker.rs
+    role: "Bunker Vault backend — zero-knowledge client-side crypto."
+  - path: src/vault/backends/hcp.rs
+    role: "HashiCorp Vault KV v2 backend — token auth, server-side seal."
+  - path: src/vault/backends/gcp.rs
+    role: "Google Secret Manager backend — ambient ADC auth (no cached session), filename/mime via annotations, secretId sanitization."
+
+functions:
+  - symbol: derive_master_key
+    path: src/vault/crypto.rs
+    signature: "fn derive_master_key(password: &[u8], salt: &[u8]) -> Result<Zeroizing<[u8; 32]>>"
+    role: "Argon2id(m=65536,t=3,p=4) → 32-byte master key, zeroized on drop."
+  - symbol: auth_hash
+    path: src/vault/crypto.rs
+    signature: "fn auth_hash(master_key: &[u8; 32], salt: &[u8]) -> Result<[u8; 32]>"
+    role: "Argon2id(m=19456,t=2,p=1) second pass. Sent to the server as master_key_hash at login/register."
+  - symbol: encrypt
+    path: src/vault/crypto.rs
+    signature: "fn encrypt(key: &[u8; 32], plaintext: &[u8]) -> Result<SecretEnvelope>"
+    role: "XChaCha20-Poly1305 with random 24-byte nonce. Returns {ciphertext, nonce} envelope."
+  - symbol: decrypt
+    path: src/vault/crypto.rs
+    signature: "fn decrypt(key: &[u8; 32], ciphertext: &[u8], nonce: &[u8]) -> Result<Vec<u8>>"
+    role: "Inverse of encrypt; rejects non-24-byte nonces as InvalidNonce."
+  - symbol: HttpClient::get_salt
+    path: src/vault/client.rs
+    signature: "fn get_salt(&self, email: &str) -> Result<Vec<u8>>"
+    role: "POST /api/v1/auth/salt → kdf_salt bytes."
+  - symbol: HttpClient::register
+    path: src/vault/client.rs
+    signature: "fn register(&self, email: &str, auth_hash: &[u8], kdf_salt: &[u8]) -> Result<AuthTokens>"
+    role: "POST /api/v1/auth/register. Not surfaced in the CLI — used only by examples/register.rs."
+  - symbol: HttpClient::login
+    path: src/vault/client.rs
+    signature: "fn login(&self, email: &str, auth_hash: &[u8]) -> Result<AuthTokens>"
+    role: "POST /api/v1/auth/login → access + refresh + expires_at."
+  - symbol: HttpClient::refresh
+    path: src/vault/client.rs
+    signature: "fn refresh(&self, refresh_token: &str) -> Result<AuthTokens>"
+    role: "POST /api/v1/auth/refresh. Old refresh token is invalidated — caller must persist the new pair before the call returns to the user."
+  - symbol: HttpClient::logout
+    path: src/vault/client.rs
+    signature: "fn logout(&self, refresh_token: &str, access: &str) -> Result<()>"
+    role: "POST /api/v1/auth/logout with Bearer access."
+  - symbol: HttpClient::list_secrets
+    path: src/vault/client.rs
+    signature: "fn list_secrets(&self, access: &str) -> Result<Vec<SecretResponseDto>>"
+    role: "GET /api/v1/secrets."
+  - symbol: HttpClient::create_secret
+    path: src/vault/client.rs
+    role: "POST /api/v1/secrets with {kind, ciphertext, nonce} base64."
+  - symbol: HttpClient::update_secret
+    path: src/vault/client.rs
+    role: "PUT /api/v1/secrets/:id — used by push --overwrite."
+  - symbol: HttpClient::delete_secret
+    path: src/vault/client.rs
+    role: "DELETE /api/v1/secrets/:id."
+  - symbol: Session::open
+    path: src/vault/cli.rs
+    role: "Load VaultConfig + SecretStore entries (tokens + master_key) into an in-memory session."
+  - symbol: Session::call
+    path: src/vault/cli.rs
+    role: "Run an HTTP op; on Unauthorized, silently refresh tokens, persist them, and retry once."
+  - symbol: Session::list_files
+    path: src/vault/cli.rs
+    role: "List secrets of kind `file`, decrypt each envelope client-side, and hand back (dto, FilePayload) pairs."
+  - symbol: default_store
+    path: src/vault/storage.rs
+    role: "Return a Box<dyn SecretStore>: KeyringStore when probe() succeeds, else FileStore with an stderr warning."
+  - symbol: run
+    path: src/vault/cli.rs
+    signature: "fn run(cli: VaultCli) -> Result<()>"
+    role: "Dispatcher called from main() when argv[1] == \"vault\"."
+  - symbol: auto_secret_name
+    path: src/vault/cli.rs
+    signature: "pub(crate) fn auto_secret_name(filename: &str) -> String"
+    role: "Default push name when --name is omitted: `{cwd-basename}-{filename}-{YYYY-MM-DD}` slugged via sanitize_secret_id."
+  - symbol: sanitize_secret_id
+    path: src/vault/backends/gcp.rs
+    signature: "pub fn sanitize_secret_id(raw: &str) -> String"
+    role: "Folds anything outside [A-Za-z0-9_-] to `-`, collapses runs, trims, caps at 255 chars, never returns empty. Secret Manager's secretId contract."
+  - symbol: GcpBackend::discover_token
+    path: src/vault/backends/gcp.rs
+    role: "ADC discovery: CLOUDSDK_AUTH_ACCESS_TOKEN → credentials JSON (authorized_user refresh flow) → gcloud CLI → GCE metadata server."
+
+types:
+  - symbol: VaultConfig
+    path: src/vault/config.rs
+    kind: struct
+    role: "Plaintext config at ~/.config/confctl/vault.toml (0600): top-level `backend` selector + per-backend sections [bunker], [hcp], [gcp]."
+  - symbol: GcpConfig
+    path: src/vault/config.rs
+    kind: struct
+    role: "{project, credentials_file?} — GCP project ID for Secret Manager plus optional explicit ADC JSON path."
+  - symbol: GcpBackend
+    path: src/vault/backends/gcp.rs
+    kind: struct
+    role: "Backend impl over the Secret Manager REST v1 API; per-invocation token cache, never persisted."
+  - symbol: AuthTokens
+    path: src/vault/storage.rs
+    kind: struct
+    role: "{access: JWT, refresh: opaque, expires_at: DateTime<Utc>}."
+  - symbol: SecretEnvelope
+    path: src/vault/crypto.rs
+    kind: struct
+    role: "{ciphertext: Vec<u8>, nonce: [u8; 24]}. 24 matches XChaCha20 XNonce."
+  - symbol: FilePayload
+    path: src/vault/cli.rs
+    kind: struct
+    role: "Client-side plaintext before encryption. Mirrors vault-types::FileAttachment (filename, mime_type, size, content b64, display_name, labels, notes)."
+  - symbol: SecretPayload
+    path: src/vault/cli.rs
+    kind: enum
+    role: "Tagged enum {kind, data} matching vault-types::Secret — only the File variant is implemented for now."
+  - symbol: VaultCli
+    path: src/vault/cli.rs
+    kind: struct
+    role: "Clap Args container; global --config flag + VaultCommand."
+  - symbol: VaultCommand
+    path: src/vault/cli.rs
+    kind: enum
+    role: "Seven subcommands: login / logout / status / list / push / pull / rm."
+  - symbol: HttpClient
+    path: src/vault/client.rs
+    kind: struct
+    role: "Wraps a tuned ureq::Agent; no tokio."
+  - symbol: SecretResponseDto
+    path: src/vault/client.rs
+    kind: struct
+    role: "Wire shape of encrypted server-stored secrets (id, kind, ciphertext b64, nonce b64, timestamps)."
+  - symbol: Unauthorized
+    path: src/vault/client.rs
+    kind: struct
+    role: "Thiserror marker surfaced when the server returns HTTP 401; walked with is_unauthorized() by the retry path."
+  - symbol: SecretStore (trait)
+    path: src/vault/storage.rs
+    kind: trait
+    role: "Backend-agnostic contract for master_key + tokens. Two implementations: KeyringStore (default) and FileStore (fallback)."
+  - symbol: KeyringStore
+    path: src/vault/storage.rs
+    kind: struct
+    role: "Keyring-backed SecretStore. Service `confctl`, account `{email}:{slot}`."
+  - symbol: FileStore
+    path: src/vault/storage.rs
+    kind: struct
+    role: "TOML-file-backed SecretStore at ~/.config/confctl/vault-secrets.toml, chmod 0600, base64 values."
+  - symbol: CryptoError
+    path: src/vault/crypto.rs
+    kind: enum
+    role: "Typed crypto errors: KeyDerivation / Encryption / Decryption / InvalidNonce(usize)."
+
+cli_surface:
+  - subcommand: "vault login"
+    path: src/vault/cli.rs
+    role: "Interactive login with --url / --email flags; password via prompt or CONFCTL_VAULT_PASSWORD env. Persists VaultConfig + master_key + tokens."
+  - subcommand: "vault logout"
+    path: src/vault/cli.rs
+    role: "Calls POST /auth/logout, then clears the SecretStore entries for the configured email."
+  - subcommand: "vault status"
+    path: src/vault/cli.rs
+    role: "Prints url / email / access (valid|expired|missing) / refresh / master-key presence."
+  - subcommand: "vault list"
+    path: src/vault/cli.rs
+    role: "Decrypt every `file`-kind secret and print {id, name, size, updated_at}. Supports --json."
+  - subcommand: "vault push"
+    path: src/vault/cli.rs
+    role: "Pushes a file (or stdin via `-`) to the selected backend. Flags: --name --mime --labels --overwrite. Without --name, auto-names `{dir}-{file}-{date}`."
+  - subcommand: "vault pull"
+    path: src/vault/cli.rs
+    role: "Locate by display_name or --id, decrypt, write to --out path or `-` for stdout."
+  - subcommand: "vault rm"
+    path: src/vault/cli.rs
+    role: "Locate by display_name, prompt unless --yes, DELETE the server record."
+  - flag: "--config <PATH>"
+    path: src/vault/cli.rs
+    role: "Global override for the config file path (vault.toml). Defaults to ~/.config/confctl/vault.toml."
+  - env: "CONFCTL_VAULT_PASSWORD"
+    path: src/vault/cli.rs
+    role: "When set and non-empty, replaces the interactive password prompt in `vault login`. Used for CI / scripted login."
+
+formats:
+  - name: "kind=file envelope"
+    role: "Plaintext JSON shape encrypted by push and decrypted by pull/list/rm."
+    shape: '{"kind":"file","data":{"filename":string,"mime_type":string,"size":u64,"content":base64,"display_name"?:string,"labels"?:[string],"notes"?:string}}'
+    wire_reference: /srv/bunker-vault/crates/vault-types/src/secret.rs
+
+endpoints:
+  - method: POST
+    path: /api/v1/auth/salt
+    role: "Fetch kdf_salt for an email (public)."
+  - method: POST
+    path: /api/v1/auth/register
+    role: "Create a user. Not exposed in the CLI — only from examples/register.rs."
+  - method: POST
+    path: /api/v1/auth/login
+    role: "Exchange email + auth_hash for (access, refresh, expires_at)."
+  - method: POST
+    path: /api/v1/auth/refresh
+    role: "Rotate refresh_token + issue a new access. Old refresh is invalidated."
+  - method: POST
+    path: /api/v1/auth/logout
+    role: "Invalidate the refresh_token server-side."
+  - method: GET
+    path: /api/v1/secrets
+    role: "List all the caller's secrets (encrypted)."
+  - method: POST
+    path: /api/v1/secrets
+    role: "Create a new secret with {kind, ciphertext, nonce}."
+  - method: PUT
+    path: /api/v1/secrets/:id
+    role: "Replace a secret's ciphertext (used by push --overwrite)."
+  - method: DELETE
+    path: /api/v1/secrets/:id
+    role: "Remove a secret."
+
+tests:
+  - name: sanitize_folds_invalid_chars / sanitize_never_returns_empty / short_id_strips_resource_prefix
+    path: src/vault/backends/gcp.rs
+    covers: "secretId sanitization contract and resource-name shortening."
+  - name: test_auto_secret_name_is_dir_file_date_slug
+    path: src/tests.rs
+    covers: "Auto push name ends with today's date, carries the filename, stays in [A-Za-z0-9_-]."
+  - name: parity_derive_key_short_password_zero_salt
+    path: src/vault/crypto.rs
+    covers: "Argon2id(m=65536,t=3,p=4) on fixture 1 matches the bit-for-bit hex from bunker-vault's crypto-vectors.json."
+  - name: parity_derive_key_long_password_high_salt
+    path: src/vault/crypto.rs
+    covers: "Same as above on fixture 2."
+  - name: parity_auth_hash_roundtrip_from_derive_key
+    path: src/vault/crypto.rs
+    covers: "Argon2id(m=19456,t=2,p=1) over a derived master key matches the frozen auth-hash vector."
+  - name: parity_auth_hash_high_entropy
+    path: src/vault/crypto.rs
+    covers: "Same as above with a synthetic high-entropy master key."
+  - name: parity_aead_empty_plaintext
+    path: src/vault/crypto.rs
+    covers: "Deterministic XChaCha20-Poly1305 ciphertext on an empty plaintext with fixed key+nonce."
+  - name: parity_aead_hello_world
+    path: src/vault/crypto.rs
+    covers: "Same as above with a 20-byte ASCII plaintext."
+  - name: parity_aead_64_bytes_binary
+    path: src/vault/crypto.rs
+    covers: "Same as above with a 64-byte binary plaintext."
+  - name: random_nonce_roundtrip
+    path: src/vault/crypto.rs
+    covers: "encrypt() returns a 24-byte nonce and decrypt() recovers the plaintext."
+  - name: decrypt_wrong_nonce_length
+    path: src/vault/crypto.rs
+    covers: "decrypt() on a 16-byte nonce returns CryptoError::InvalidNonce(16)."
+  - name: decrypt_wrong_key_fails
+    path: src/vault/crypto.rs
+    covers: "Decrypting with the wrong master key returns CryptoError::Decryption, not a panic or garbage."
+  - name: roundtrip (config)
+    path: src/vault/config.rs
+    covers: "VaultConfig save_to/load_from roundtrip preserves url, email, kdf_salt_b64."
+  - name: save_sets_0600 (config)
+    path: src/vault/config.rs
+    covers: "vault.toml is written with 0600 on Unix."
+  - name: file_store_roundtrip
+    path: src/vault/storage.rs
+    covers: "FileStore put_master_key / put_tokens / get_* / clear round-trip per account; accounts are isolated."
+  - name: file_store_is_0600
+    path: src/vault/storage.rs
+    covers: "vault-secrets.toml is written with 0600 on Unix."
+  - name: file_store_missing_returns_none
+    path: src/vault/storage.rs
+    covers: "get_master_key / get_tokens on a nonexistent file return Ok(None), not an error."
+  - name: url_join_trims_trailing_slash
+    path: src/vault/client.rs
+    covers: "HttpClient::new strips a trailing `/` so url()/auth-and-secret paths never double up."
+  - name: e2e_full_roundtrip
+    path: src/vault/client.rs
+    covers: "Gated by CONFCTL_E2E=1. Against a real bunker-vault on CONFCTL_VAULT_URL: register → salt-parity → login → create_secret → list_secrets → delete_secret → logout."
+
+fixtures:
+  - path: /srv/bunker-vault/extension/test-vectors/crypto-vectors.json
+    role: "Authoritative frozen Argon2/AEAD vectors, regenerated via `cargo test -p vault-core --test vectors_gen -- --ignored` upstream. The values are copied verbatim into crypto.rs parity tests — if upstream params move, the JSON must be regenerated AND the consts in src/vault/crypto.rs plus the copied hex strings both bumped."
+  - path: examples/register.rs
+    role: "Developer tool to seed a test account against a running bunker-vault. Independent of vault-core/vault-cli; re-implements the Argon2 parameters inline so it does not drag confctl's internals into the example crate."
+
+dependencies:
+  - crate: ureq
+    features: ["json", "tls"]
+    role: "Sync HTTP + rustls."
+  - crate: argon2
+    role: "Argon2id KDF (two parameter suites: derive-key and auth-hash)."
+  - crate: chacha20poly1305
+    role: "XChaCha20-Poly1305 AEAD."
+  - crate: zeroize
+    role: "Wipes master_key from memory on drop."
+  - crate: keyring
+    features: ["linux-native"]
+    role: "OS credential store."
+  - crate: rpassword
+    role: "Hidden-echo password prompt on the TTY."
+  - crate: dirs
+    role: "Cross-platform config_dir()."
+  - crate: uuid
+    features: ["serde"]
+    role: "Declared for wire types; IDs are serialized as strings today."
+  - crate: chrono
+    features: ["serde"]
+    role: "ISO-8601 expires_at parsing."
+  - crate: thiserror
+    role: "Typed errors (CryptoError, Unauthorized)."
+
+related:
+  - domain: cli
+    why: "main() in src/main.rs dispatches `confctl vault …` into vault::cli::run. Legacy `confctl file path` remains unaffected."
+  - domain: build
+    why: "New dependencies (argon2, chacha20poly1305, ureq, keyring) add ~2–3 MB to the stripped release binary; same MUSL/macOS matrix in release.yml."

@@ -1,0 +1,63 @@
+domain: resolver
+summary: "Dotted-path navigation over parsed values, including numeric array indices and descriptive error messages."
+last_invoked_by: main
+last_updated: "2026-04-23"
+
+modules:
+  - path: src/main.rs
+    role: "Holds resolve_path — the single function that walks a dotted path."
+
+functions:
+  - symbol: resolve_path
+    path: src/main.rs#L181-L218
+    signature: "fn resolve_path<'a>(value: &'a Value, dotted_path: &str) -> Result<&'a Value>"
+    role: "Splits the path on `.`, then for each segment: key lookup on objects, numeric index on arrays, error on scalars."
+
+path_syntax:
+  - pattern: "club.name"
+    meaning: "Nested object key."
+  - pattern: "players.0.name"
+    meaning: "Array index followed by key."
+  - pattern: "titles.la_liga"
+    meaning: "Deep key with underscore."
+  - pattern: "season"
+    meaning: "Top-level key — returns the whole subtree."
+
+error_cases:
+  - case: "Missing object key"
+    message: "Key not found: '{segment}' (at path '{path_so_far}')"
+    path: src/main.rs#L190-L192
+  - case: "Non-numeric segment on array"
+    message: "Expected numeric index for array access, got '{segment}' (at path '{path_so_far}')"
+    path: src/main.rs#L195-L199
+  - case: "Array index out of range"
+    message: "Array index {index} out of bounds (length {len}) at path '{path_so_far}'"
+    path: src/main.rs#L200-L206
+  - case: "Descending into a scalar"
+    message: "Cannot traverse into a scalar value at '{parent_path}' (trying to access '{segment}')"
+    path: src/main.rs#L207-L213
+
+tests:
+  - name: test_resolve_simple_key
+    path: src/tests.rs#L6-L10
+    covers: "Nested object traversal returns the expected scalar."
+  - name: test_resolve_numeric_index
+    path: src/tests.rs#L13-L17
+    covers: "Numeric segment indexes into an array correctly."
+  - name: test_resolve_missing_key
+    path: src/tests.rs#L20-L25
+    covers: "Missing object key produces a 'Key not found' error."
+  - name: test_resolve_index_out_of_bounds
+    path: src/tests.rs#L28-L33
+    covers: "Out-of-range array index produces an 'out of bounds' error."
+  - name: test_resolve_scalar_traversal
+    path: src/tests.rs#L36-L41
+    covers: "Attempting to traverse into a scalar produces a 'scalar value' error."
+
+related:
+  - domain: parser
+    why: "Consumes the serde_json::Value produced by parse_file / parse_content."
+  - domain: output
+    why: "Its &Value result is handed straight to format_value / format_value_colored."
+  - domain: cli
+    why: "Only invoked when the user supplies a dotted path; otherwise main() dumps the whole Value."

@@ -1,0 +1,110 @@
+domain: build
+summary: "Build targets, mise tasks, Dockerfile, install.sh, and the GitHub Actions CI/release pipelines."
+last_updated: "2026-07-12"
+
+version:
+  current: "0.0.4"
+  sources:
+    - path: VERSION
+      role: "Single line — bumped on release via `chore(release)` commits."
+    - path: Cargo.toml
+      role: "`[package].version` — kept in sync with VERSION."
+    - path: releases_notes.toml
+      role: "Per-version title + body consumed by the release tooling."
+
+toolchain:
+  rust: "1.91.1"
+  sources:
+    - path: .mise.toml
+      role: "Pins Rust via mise (`[tools].rust = \"1.91.1\"`)."
+    - path: Dockerfile
+      role: "`FROM rust:1.91.1-slim AS builder`."
+    - path: .github/workflows/ci.yml
+      role: "Same version pinned on dtolnay/rust-toolchain."
+    - path: .github/workflows/release.yml
+      role: "Same version pinned for each matrix target."
+
+mise_tasks:
+  - name: setup
+    path: .mise.toml
+    role: "Installs Rust 1.91.1 and adds x86_64-unknown-linux-{gnu,musl} targets."
+  - name: build
+    path: .mise.toml
+    role: "Default release build (`cargo build --release`)."
+  - name: "build:linux-gnu"
+    path: .mise.toml
+    role: "Release build for x86_64-unknown-linux-gnu."
+  - name: "build:linux-musl"
+    path: .mise.toml
+    role: "Static MUSL build — relies on `.cargo/config.toml` for link-self-contained."
+  - name: "build:mac-silicon"
+    path: .mise.toml
+    role: "Release build for aarch64-apple-darwin."
+  - name: "build:all"
+    path: .mise.toml
+    role: "Composite that runs build:linux-gnu + build:linux-musl."
+  - name: install
+    path: .mise.toml
+    role: "Release build + copy to ~/.local/bin/confctl."
+  - name: test
+    path: .mise.toml
+    role: "`cargo test`."
+  - name: check
+    path: .mise.toml
+    role: "`cargo check`."
+  - name: clippy
+    path: .mise.toml
+    role: "`cargo clippy -- -D warnings`."
+  - name: fmt
+    path: .mise.toml
+    role: "`cargo fmt`."
+  - name: "fmt:check"
+    path: .mise.toml
+    role: "`cargo fmt -- --check` — used by CI."
+
+cargo_config:
+  - path: .cargo/config.toml
+    role: "Static-link flags for x86_64-unknown-linux-musl (`+crt-static`, `link-self-contained=yes`)."
+
+docker:
+  - path: Dockerfile
+    role: "Two-stage build: rust:1.91.1-slim builder with musl-tools → scratch image shipping a single static binary at `/confctl` as ENTRYPOINT."
+
+install_script:
+  - path: install.sh
+    role: "Detects OS/arch (linux/amd64, darwin/arm64, darwin/amd64), downloads the matching binary from GitHub Releases, installs to /usr/local/bin/confctl."
+
+artefacts:
+  - name: confctl-linux-amd64
+    target: x86_64-unknown-linux-musl
+    role: "Fully static Linux binary — the one ADD-pulled into Dockerfiles."
+  - name: confctl-darwin-arm64
+    target: aarch64-apple-darwin
+    role: "macOS Apple Silicon build."
+  - name: confctl-darwin-amd64
+    target: x86_64-apple-darwin
+    role: "macOS Intel build."
+
+github_workflows:
+  - name: CI Pipeline
+    path: .github/workflows/ci.yml
+    triggers: ["push to main", "PR to main", "workflow_dispatch"]
+    role: "fmt --check → clippy -D warnings → cargo test → cargo build --release → upload artifact `confctl-binary`."
+  - name: CD Pipeline - Release
+    path: .github/workflows/release.yml
+    triggers: ["push to tags v*", "push to main", "workflow_dispatch"]
+    role: "Matrix build of the three artefacts above and publishes a GitHub Release when triggered by a tag."
+  - name: Auto Tag (Manual)
+    path: .github/workflows/tag.yml
+    triggers: ["workflow_dispatch"]
+    role: "Runs .github/scripts/release.py (Python 3.12 + requests) to compute and push the next semver tag."
+
+release_script:
+  - path: .github/scripts/release.py
+    role: "Python helper invoked by tag.yml to create and push the next tag; reads releases_notes.toml for the body."
+
+related:
+  - domain: cli
+    why: "The binary `confctl` built here is the single consumer of every other domain."
+  - domain: parser
+    why: "Dockerfile ships the static MUSL binary that install.sh distributes."

@@ -4,9 +4,12 @@ use std::path::Path;
 
 use anyhow::{anyhow, bail, Context, Result};
 use base64::{engine::general_purpose::STANDARD, Engine};
-use clap::{Parser, ValueEnum};
+use clap::{Parser, Subcommand, ValueEnum};
 use colored::Colorize;
 use serde_json::{Map, Value};
+
+mod diff;
+mod vault;
 
 #[derive(Parser)]
 #[command(
@@ -26,10 +29,27 @@ struct Cli {
 
     #[arg(short = 'e', long = "encode", conflicts_with = "decode")]
     encode: bool,
+
+    /// Mask sensitive values before printing: keys matching PASS, PWD, SECRET, TOKEN, KEY,
+    /// HASH, CREDENTIAL plus values with known secret shapes (ghp_*, sk-*, AKIA*, JWTs, PEM).
+    #[arg(short = 'r', long = "redact")]
+    redact: bool,
+
+    #[command(subcommand)]
+    command: Option<Command>,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// Compare two config files with a human-friendly diff.
+    Diff(diff::DiffCli),
+
+    /// Push/pull secret files to a Bunker Vault server.
+    Vault(vault::cli::VaultCli),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
-enum Format {
+pub(crate) enum Format {
     Json,
     Yaml,
     Toml,
@@ -142,7 +162,11 @@ fn parse_env_format(content: &str) -> Value {
     Value::Object(map)
 }
 
-fn parse_content(file_path: &str, content: &str, forced_format: Option<Format>) -> Result<Value> {
+pub(crate) fn parse_content(
+    file_path: &str,
+    content: &str,
+    forced_format: Option<Format>,
+) -> Result<Value> {
     let format = detect_format(file_path, content, forced_format)?;
 
     let value = match format {
@@ -278,6 +302,62 @@ fn format_value_colored(value: &Value) -> String {
     }
 }
 
+fn looks_like_secret_value(value: &str) -> bool {
+    const SECRET_PREFIXES: &[&str] = &[
+        "ghp_",
+        "gho_",
+        "ghu_",
+        "ghs_",
+        "ghr_",
+        "github_pat_",
+        "glpat-",
+        "sk-",
+        "sk_live_",
+        "sk_test_",
+        "rk_live_",
+        "rk_test_",
+        "xoxb-",
+        "xoxp-",
+        "xoxa-",
+        "xoxs-",
+        "xapp-",
+        "npm_",
+        "pypi-",
+        "AKIA",
+        "AIza",
+        "-----BEGIN",
+    ];
+
+    if SECRET_PREFIXES.iter().any(|p| value.starts_with(p)) {
+        return true;
+    }
+
+    // JWT: three dot-separated base64url segments, header always starts with "eyJ".
+    value.starts_with("eyJ") && value.matches('.').count() == 2
+}
+
+fn redact_sensitive(value: &Value) -> Value {
+    match value {
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .map(|(key, val)| {
+                    let new_val = if diff::is_sensitive_path(key) {
+                        Value::String("<redacted>".to_string())
+                    } else {
+                        redact_sensitive(val)
+                    };
+                    (key.clone(), new_val)
+                })
+                .collect(),
+        ),
+        Value::Array(arr) => Value::Array(arr.iter().map(redact_sensitive).collect()),
+        Value::String(s) if looks_like_secret_value(s) => {
+            Value::String("<redacted>".to_string())
+        }
+        other => other.clone(),
+    }
+}
+
 fn apply_base64_transform(input: &str, decode: bool, encode: bool) -> Result<String> {
     if decode {
         let decoded = STANDARD
@@ -336,12 +416,30 @@ fn resolve_input(
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+
     let use_color = atty::is(atty::Stream::Stdout);
+
+    if let Some(command) = cli.command {
+        match command {
+            Command::Diff(diff_cli) => {
+                if diff::run(diff_cli, use_color)? {
+                    std::process::exit(1);
+                }
+                return Ok(());
+            }
+            Command::Vault(vault_cli) => return vault::cli::run(vault_cli),
+        }
+    }
+
     let stdin_is_tty = atty::is(atty::Stream::Stdin);
 
     let (file, path) = resolve_input(cli.file, cli.path, stdin_is_tty)?;
 
-    let value = parse_file(&file, cli.format)?;
+    let mut value = parse_file(&file, cli.format)?;
+
+    if cli.redact {
+        value = redact_sensitive(&value);
+    }
 
     match path {
         Some(path) => {

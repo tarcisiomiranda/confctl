@@ -1,0 +1,59 @@
+domain: output
+summary: "Plain and jq-style coloured rendering of scalars, objects and arrays for terminal vs piped stdout."
+last_updated: "2026-04-23"
+
+modules:
+  - path: src/main.rs
+    role: "Holds format_value, format_value_colored, and colorize_json."
+
+functions:
+  - symbol: format_value
+    path: src/main.rs#L220-L228
+    signature: "fn format_value(value: &Value) -> String"
+    role: "Plain (no-color) rendering. Strings are unquoted, null/bool/number → their literal form, containers fall back to pretty JSON."
+  - symbol: format_value_colored
+    path: src/main.rs#L271-L279
+    signature: "fn format_value_colored(value: &Value) -> String"
+    role: "TTY wrapper around format_value: scalars get jq-style colours (strings green, null grey-bold), containers route to colorize_json."
+  - symbol: colorize_json
+    path: src/main.rs#L230-L269
+    signature: "fn colorize_json(value: &Value, indent: usize) -> String"
+    role: "Recursive pretty-printer with 2-space indent. Keys bold blue, strings green, numbers/bools white, null bright-black bold."
+
+color_scheme:
+  - role: key
+    style: "blue + bold"
+    path: src/main.rs#L260
+  - role: string
+    style: "green"
+    path: src/main.rs#L238
+  - role: number
+    style: "white"
+    path: src/main.rs#L236
+  - role: bool
+    style: "white"
+    path: src/main.rs#L237
+  - role: "null"
+    style: "bright_black + bold"
+    path: src/main.rs#L235
+
+behaviours:
+  - name: tty-gated
+    path: src/main.rs#L339
+    role: "`use_color` is `atty::is(Stream::Stdout)` — colours disabled when piping to a file or another process."
+  - name: base64-bypass
+    path: src/main.rs#L352-L353
+    role: "When --encode/--decode is active, output is printed raw (no colours, no trailing newline on encode path)."
+  - name: whole-file-dump
+    path: src/main.rs#L360-L372
+    role: "No path given → pretty-print the full Value (coloured or plain JSON)."
+
+tests: []  # Rendering is exercised indirectly via integration tests and examples in README.md.
+
+related:
+  - domain: resolver
+    why: "Receives the &Value that resolve_path returns."
+  - domain: cli
+    why: "main() selects which formatter to call based on use_color, path presence, and --encode/--decode."
+  - domain: transform
+    why: "Base64 output bypasses colorisation entirely."

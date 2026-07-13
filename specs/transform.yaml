@@ -1,0 +1,68 @@
+domain: transform
+summary: "Optional transforms applied before printing: base64 encode/decode of the resolved value, and opt-in secret redaction of the parsed tree (--redact)."
+last_updated: "2026-07-12"
+
+modules:
+  - path: src/main.rs
+    role: "Holds apply_base64_transform, redact_sensitive, plus the --encode / --decode / --redact wiring inside main()."
+
+functions:
+  - symbol: apply_base64_transform
+    path: src/main.rs#L281-L292
+    signature: "fn apply_base64_transform(input: &str, decode: bool, encode: bool) -> Result<String>"
+    role: "If decode → base64-decode the trimmed string, require valid UTF-8. If encode → base64-encode. Else pass through."
+  - symbol: redact_sensitive
+    path: src/main.rs#L305-L360
+    signature: "fn redact_sensitive(value: &Value) -> Value"
+    role: "Recursively walks the parsed tree; keys matching diff::is_sensitive_path get their whole subtree replaced by \"<redacted>\"; string leaves matching looks_like_secret_value are masked regardless of key."
+  - symbol: looks_like_secret_value
+    path: src/main.rs#L305-L335
+    signature: "fn looks_like_secret_value(value: &str) -> bool"
+    role: "Value-shape detection: known secret prefixes (ghp_, glpat-, sk-, sk_live_, xoxb-, npm_, AKIA, AIza, -----BEGIN, …) plus JWT structure (eyJ + two dots)."
+  - symbol: is_sensitive_path
+    path: src/diff.rs#L256-L261
+    signature: "pub(crate) fn is_sensitive_path(path: &str) -> bool"
+    role: "Case-insensitive substring match against PASS, PWD, SECRET, TOKEN, KEY, HASH, CREDENTIAL — shared by diff masking and --redact."
+
+cli_surface:
+  - flag: "--decode"
+    short: "-d"
+    path: src/main.rs#L24-L25
+    role: "Treat the resolved value as base64 and decode it to UTF-8."
+  - flag: "--encode"
+    short: "-e"
+    path: src/main.rs#L27-L28
+    role: "Base64-encode the resolved value; without a path, encodes the full pretty-JSON dump."
+
+mutual_exclusivity:
+  note: "clap enforces --decode and --encode as mutually exclusive via `conflicts_with`."
+  path: src/main.rs#L24-L28
+
+behaviours:
+  - name: trim-on-decode
+    path: src/main.rs#L283-L285
+    role: "Input is trimmed before decoding to tolerate trailing newlines from shell pipelines."
+  - name: utf8-required
+    path: src/main.rs#L286
+    role: "Decoded bytes must be valid UTF-8; arbitrary binary payloads will error out."
+  - name: raw-print
+    path: src/main.rs#L352-L353
+    role: "When either flag is active, output is emitted with `print!` (no newline, no colour)."
+  - name: full-file-encode
+    path: src/main.rs#L361-L364
+    role: "`--encode` without a path encodes the pretty-printed JSON of the whole Value."
+
+dependencies:
+  - crate: base64
+    version_note: "0.22 — uses STANDARD engine from base64::engine::general_purpose."
+    role: "Encoding and decoding."
+
+tests: []  # Covered only manually via CLI; no dedicated unit test yet — candidate for a future PR.
+
+related:
+  - domain: cli
+    why: "Flags are declared on Cli and wired through main()."
+  - domain: resolver
+    why: "Transform runs on the string produced from the resolved Value."
+  - domain: output
+    why: "Transform output bypasses the coloured formatter entirely."
