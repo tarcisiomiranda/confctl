@@ -54,6 +54,13 @@ cli_surface:
     short: "-r"
     path: src/main.rs#L33-L36
     role: "Opt-in masking: keys matching PASS, PWD, SECRET, TOKEN, KEY, HASH, CREDENTIAL and secret-shaped values (ghp_*, sk-*, AKIA*, JWT, PEM) print as <redacted>. Safe to paste into logs/AI chats."
+  - flag: "--compact"
+    short: "-c"
+    path: src/main.rs#L38-L40
+    role: "Minified single-line JSON output (uncolored) — for CI/pipeline env vars. Composes with --encode."
+  - flag: "--copy"
+    path: src/main.rs#L42-L45
+    role: "Also pipe the final output into the system clipboard via wl-copy / xclip / xsel / pbcopy (first available). Confirmation on stderr."
 
 behaviours:
   - name: stdin-first

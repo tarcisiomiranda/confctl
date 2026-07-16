@@ -36,6 +36,15 @@ struct Cli {
     #[arg(short = 'r', long = "redact")]
     redact: bool,
 
+    /// Minified single-line JSON output — ideal for CI/pipeline env vars.
+    #[arg(short = 'c', long = "compact")]
+    compact: bool,
+
+    /// Also copy the final output to the system clipboard
+    /// (wl-copy / xclip / xsel / pbcopy, first one found).
+    #[arg(long = "copy")]
+    copy: bool,
+
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -248,14 +257,52 @@ fn resolve_path<'a>(value: &'a Value, dotted_path: &str) -> Result<&'a Value> {
     Ok(current)
 }
 
-fn format_value(value: &Value) -> String {
+fn format_value_with(value: &Value, compact: bool) -> String {
     match value {
         Value::String(s) => s.clone(),
         Value::Null => "null".to_string(),
         Value::Bool(b) => b.to_string(),
         Value::Number(n) => n.to_string(),
+        _ if compact => serde_json::to_string(value).unwrap_or_else(|_| format!("{value:?}")),
         _ => serde_json::to_string_pretty(value).unwrap_or_else(|_| format!("{value:?}")),
     }
+}
+
+/// Pipe `text` into the first clipboard tool that works. The confirmation
+/// goes to stderr so stdout stays clean for pipes.
+fn copy_to_clipboard(text: &str) -> Result<()> {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    const TOOLS: &[(&str, &[&str])] = &[
+        ("wl-copy", &[]),
+        ("xclip", &["-selection", "clipboard"]),
+        ("xsel", &["--clipboard", "--input"]),
+        ("pbcopy", &[]),
+    ];
+
+    for (tool, args) in TOOLS {
+        let spawned = Command::new(tool)
+            .args(*args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn();
+        let Ok(mut child) = spawned else { continue };
+        if let Some(mut stdin) = child.stdin.take() {
+            if stdin.write_all(text.as_bytes()).is_err() {
+                continue;
+            }
+        }
+        match child.wait() {
+            Ok(status) if status.success() => {
+                eprintln!("{} copied to clipboard ({tool})", "✓".green().bold());
+                return Ok(());
+            }
+            _ => continue,
+        }
+    }
+    bail!("no clipboard tool available — install wl-clipboard (Wayland), xclip/xsel (X11), or pbcopy (macOS)")
 }
 
 fn colorize_json(value: &Value, indent: usize) -> String {
@@ -450,33 +497,45 @@ fn main() -> Result<()> {
         value = redact_sensitive(&value);
     }
 
-    match path {
+    let final_output = match path {
         Some(path) => {
             let result = resolve_path(&value, &path)?;
-            let output = format_value(result);
+            let output = format_value_with(result, cli.compact);
             let final_output = apply_base64_transform(&output, cli.decode, cli.encode)?;
 
             if cli.decode || cli.encode {
                 print!("{}", final_output);
-            } else if use_color {
+            } else if use_color && !cli.compact {
                 println!("{}", format_value_colored(result));
             } else {
-                println!("{}", output);
+                println!("{}", final_output);
             }
+            final_output
         }
         None => {
-            if cli.encode {
-                let json_str = serde_json::to_string_pretty(&value)
-                    .context("Failed to serialize value to JSON")?;
-                print!("{}", STANDARD.encode(&json_str));
-            } else if use_color {
-                println!("{}", colorize_json(&value, 0));
+            let json_str = if cli.compact {
+                serde_json::to_string(&value).context("Failed to serialize value to JSON")?
             } else {
-                let pretty = serde_json::to_string_pretty(&value)
-                    .context("Failed to serialize value to JSON")?;
-                println!("{pretty}");
+                serde_json::to_string_pretty(&value)
+                    .context("Failed to serialize value to JSON")?
+            };
+            if cli.encode {
+                let encoded = STANDARD.encode(&json_str);
+                print!("{}", encoded);
+                encoded
+            } else {
+                if use_color && !cli.compact {
+                    println!("{}", colorize_json(&value, 0));
+                } else {
+                    println!("{json_str}");
+                }
+                json_str
             }
         }
+    };
+
+    if cli.copy {
+        copy_to_clipboard(&final_output)?;
     }
 
     Ok(())

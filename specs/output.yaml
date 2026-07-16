@@ -1,16 +1,20 @@
 domain: output
-summary: "Plain and jq-style coloured rendering of scalars, objects and arrays for terminal vs piped stdout."
-last_updated: "2026-04-23"
+summary: "Plain, compact (-c), and jq-style coloured rendering of scalars, objects and arrays; --copy pipes the final plain output into the system clipboard."
+last_updated: "2026-07-13"
 
 modules:
   - path: src/main.rs
-    role: "Holds format_value, format_value_colored, and colorize_json."
+    role: "Holds format_value_with, format_value_colored, colorize_json, and copy_to_clipboard."
 
 functions:
-  - symbol: format_value
-    path: src/main.rs#L220-L228
-    signature: "fn format_value(value: &Value) -> String"
-    role: "Plain (no-color) rendering. Strings are unquoted, null/bool/number → their literal form, containers fall back to pretty JSON."
+  - symbol: format_value_with
+    path: src/main.rs
+    signature: "fn format_value_with(value: &Value, compact: bool) -> String"
+    role: "Plain (no-color) rendering. Strings are unquoted, null/bool/number → their literal form; containers render as pretty JSON, or single-line JSON when compact."
+  - symbol: copy_to_clipboard
+    path: src/main.rs
+    signature: "fn copy_to_clipboard(text: &str) -> Result<()>"
+    role: "Pipes text into the first working clipboard tool (wl-copy → xclip → xsel → pbcopy); confirmation on stderr, clear error when none exists."
   - symbol: format_value_colored
     path: src/main.rs#L271-L279
     signature: "fn format_value_colored(value: &Value) -> String"

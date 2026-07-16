@@ -154,6 +154,21 @@ confctl .env -r
 
 Works with any format and recurses into nested objects and arrays. `confctl diff` masks secrets by default (`--show-secrets` reveals them there).
 
+### Compact output + clipboard (`-c`, `--copy`)
+
+`-c` / `--compact` prints minified single-line JSON — made for stuffing a whole file (service-account JSON, config blob) into a CI/pipeline env var. `--copy` also sends the final output to the system clipboard (`wl-copy`, `xclip`, `xsel`, or `pbcopy` — first one found; confirmation goes to stderr so pipes stay clean). Both compose with `-e`:
+
+```bash
+cat service_account.json | confctl -c            # {"type":"service_account","project_id":...}
+cat service_account.json | confctl -c -e --copy  # minified → base64 → clipboard (and stdout)
+```
+
+Paste straight into GitHub Actions / GitLab CI as a secret, then decode on the other side:
+
+```bash
+echo "$GCP_SA_B64" | confctl - -d > service_account.json
+```
+
 ### Editing .env files (`set` / `unset`)
 
 Add, update, or remove keys **in place** without opening the file — comments, blank lines, ordering, `export` prefixes, and inline `#` comments are all preserved. Designed for scripts and AI agents that need to mutate a `.env` without reading its (possibly sensitive) contents.

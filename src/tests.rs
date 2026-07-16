@@ -42,17 +42,32 @@ fn test_resolve_scalar_traversal() {
 
 #[test]
 fn test_format_string_no_quotes() {
-    assert_eq!(format_value(&json!("Edmundo")), "Edmundo");
+    assert_eq!(format_value_with(&json!("Edmundo"), false), "Edmundo");
 }
 
 #[test]
 fn test_format_number() {
-    assert_eq!(format_value(&json!(9)), "9");
+    assert_eq!(format_value_with(&json!(9), false), "9");
 }
 
 #[test]
 fn test_format_bool() {
-    assert_eq!(format_value(&json!(true)), "true");
+    assert_eq!(format_value_with(&json!(true), false), "true");
+}
+
+#[test]
+fn test_format_compact_is_single_line_json() {
+    let data = json!({"a": {"b": [1, 2]}, "c": "x"});
+
+    let compact = format_value_with(&data, true);
+    assert_eq!(compact, r#"{"a":{"b":[1,2]},"c":"x"}"#);
+    assert!(!compact.contains('\n'));
+
+    // Scalars are unaffected by compact mode.
+    assert_eq!(format_value_with(&json!("plain"), true), "plain");
+
+    // Default stays pretty-printed.
+    assert!(format_value_with(&data, false).contains('\n'));
 }
 
 #[test]
