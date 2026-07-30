@@ -1,0 +1,19 @@
+# Draft notes for the next release (unreleased until tagged).
+# Update this file before tagging v0.0.6, or rename/retarget as needed.
+
+tag: v0.0.6
+title: Partial redaction, DB URLs, and agent skills
+
+highlights: |
+  Safer config inspection for humans and AI agents: redact secrets partially,
+  understand database URLs, and ship an Agent Skills package (including Grok).
+
+features:
+  - "**-r / --redact [PERCENT]** — optional 0–50; show that % of the start and end of each secret (`-r 10`, `-r 20`); omit/0 = full `<redacted>`"
+  - "**Database URLs** — `postgres://`, `postgresql://`, `mysql://`, `mongodb://`, `redis://`, … (and `jdbc:`) with embedded passwords are detected; only the password segment is masked"
+  - "**Agent skills installer** — `skills/confctl/SKILL.md` + `scripts/install_skills.py` installs into Claude, Codex, Cursor, **Grok**, OpenCode, …; optional `CONFCTL_INSTALL_SKILLS=1` on `install.sh`"
+  - "**YAML release notes** — hand-written bodies in `releases/<tag>.yaml` (stacker-style publisher)"
+
+changes:
+  - "Release publisher rewritten (stdlib GitHub API, checksum verification, conventional-commit fallback)"
+  - "`releases_notes.toml` deprecated in favor of `releases/*.yaml`"

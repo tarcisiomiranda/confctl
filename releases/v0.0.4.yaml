@@ -1,0 +1,12 @@
+tag: v0.0.4
+title: Vault Backends, Diff, and Secret Redaction
+
+features:
+  - "**`confctl vault`** — remote secret storage behind a unified CLI (`bunker` zero-knowledge, `hcp` HashiCorp KV v2, `gcp` Secret Manager via ADC)"
+  - "**`push` auto-names** secrets `{dir}-{file}-{YYYY-MM-DD}` when `--name` is omitted"
+  - "**`confctl diff`** — human-friendly structural diff for JSON/YAML/TOML/ENV with secret masking by default (`--show-secrets` to reveal)"
+  - "**-r / --redact** — mask sensitive values by key (PASS, PWD, SECRET, TOKEN, KEY, HASH, CREDENTIAL) and by value shape (tokens, JWTs, PEM, …)"
+
+changes:
+  - "`specs/` directory with a per-domain YAML inventory of the codebase"
+  - "Green coloring for string values in TTY output"

@@ -4,8 +4,11 @@ rust = "1.91.1"
 [settings]
 env_shell_expand = true
 
+# Prepend cargo user bins only. Do NOT put "$PATH" here: mise expands it against
+# a partial env, and the VS Code mise extension would then wipe /usr/bin from PATH
+# (stty/dircolors/cat: command not found in the integrated terminal).
 [env]
-_.path = ["$HOME/.cargo/bin", "$PATH"]
+_.path = ["$HOME/.cargo/bin"]
 
 # ============================================
 # confctl — Setup
@@ -98,3 +101,33 @@ run = "cargo fmt"
 [tasks."fmt:check"]
 description = "Verifica formatação sem alterar"
 run = "cargo fmt -- --check"
+
+# ============================================
+# confctl — Agent skills
+# ============================================
+[tasks."skills:list"]
+description = "Lista AI agents detectados nesta máquina"
+run = "python scripts/install_skills.py --list"
+
+[tasks."skills:install"]
+description = "Detecta AI agents e instala confctl SKILL.md (inclui Grok)"
+run = "python scripts/install_skills.py"
+
+[tasks."skills:install:all"]
+description = "Instala confctl SKILL.md em todos os caminhos conhecidos"
+run = "python scripts/install_skills.py --all"
+
+[tasks."test:skills"]
+description = "Testa o instalador de skills"
+run = "python -m unittest discover -s scripts -p 'test_install_skills.py'"
+
+# ============================================
+# confctl — Release
+# ============================================
+[tasks."release:check"]
+description = "Valida o publisher de GitHub Release (YAML notes + checksums)"
+run = """
+python -m py_compile .github/scripts/release.py .github/scripts/test_release.py
+python -m unittest discover -s .github/scripts -p 'test_*.py'
+python .github/scripts/release.py --validate-tag v0.0.0
+"""

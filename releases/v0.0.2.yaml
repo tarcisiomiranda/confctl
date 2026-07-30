@@ -1,0 +1,12 @@
+tag: v0.0.2
+title: Multi-platform + New Features
+
+features:
+  - "**Syntax highlighting** for JSON output (jq-style colors)"
+  - "**ENV file support** — read `.env`, `/etc/os-release` and KEY=value files with content auto-detection"
+  - "**Base64 encode/decode** — `-e` / `--encode`, `-d` / `--decode`"
+  - "Automatic terminal detection (colors disabled when piping)"
+
+changes:
+  - "`confctl-linux-amd64` (static MUSL), `confctl-darwin-arm64`, `confctl-darwin-amd64`"
+  - "Dependencies: `colored`, `atty`, `base64`"

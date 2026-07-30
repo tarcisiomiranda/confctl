@@ -31,10 +31,19 @@ struct Cli {
     #[arg(short = 'e', long = "encode", conflicts_with = "decode")]
     encode: bool,
 
-    /// Mask sensitive values before printing: keys matching PASS, PWD, SECRET, TOKEN, KEY,
-    /// HASH, CREDENTIAL plus values with known secret shapes (ghp_*, sk-*, AKIA*, JWTs, PEM).
-    #[arg(short = 'r', long = "redact")]
-    redact: bool,
+    /// Mask sensitive values before printing. Keys matching PASS, PWD, SECRET, TOKEN, KEY,
+    /// HASH, CREDENTIAL plus secret-shaped values (ghp_*, sk-*, AKIA*, JWTs, PEM, DB URLs).
+    /// Optional PERCENT (0–50): show that % of the start and end of each secret; omit or 0
+    /// for full `<redacted>`. Example: `-r 20` → `supe<redacted>word`.
+    #[arg(
+        short = 'r',
+        long = "redact",
+        num_args = 0..=1,
+        default_missing_value = "0",
+        value_name = "PERCENT",
+        value_parser = clap::value_parser!(u8).range(0..=50)
+    )]
+    redact: Option<u8>,
 
     /// Minified single-line JSON output — ideal for CI/pipeline env vars.
     #[arg(short = 'c', long = "compact")]
@@ -356,6 +365,48 @@ fn format_value_colored(value: &Value) -> String {
     }
 }
 
+/// Database URL schemes that often embed credentials (user:password@host).
+fn looks_like_db_url(value: &str) -> bool {
+    const DB_SCHEMES: &[&str] = &[
+        "postgres://",
+        "postgresql://",
+        "mysql://",
+        "mysql2://",
+        "mariadb://",
+        "mongodb://",
+        "mongodb+srv://",
+        "redis://",
+        "rediss://",
+        "amqp://",
+        "amqps://",
+        "cockroachdb://",
+        "sqlserver://",
+        "mssql://",
+    ];
+
+    let candidate = value
+        .strip_prefix("jdbc:")
+        .or_else(|| value.strip_prefix("JDBC:"))
+        .unwrap_or(value);
+    let lower = candidate.to_ascii_lowercase();
+    DB_SCHEMES.iter().any(|scheme| lower.starts_with(scheme))
+}
+
+/// True when a URL has `user:password@` userinfo (password may be empty after `:`).
+fn db_url_has_password(value: &str) -> bool {
+    let candidate = value
+        .strip_prefix("jdbc:")
+        .or_else(|| value.strip_prefix("JDBC:"))
+        .unwrap_or(value);
+    let Some(rest) = candidate.split_once("://").map(|(_, rest)| rest) else {
+        return false;
+    };
+    let Some(userinfo) = rest.split_once('@').map(|(userinfo, _)| userinfo) else {
+        return false;
+    };
+    userinfo.contains(':')
+}
+
 fn looks_like_secret_value(value: &str) -> bool {
     const SECRET_PREFIXES: &[&str] = &[
         "ghp_",
@@ -387,26 +438,90 @@ fn looks_like_secret_value(value: &str) -> bool {
     }
 
     // JWT: three dot-separated base64url segments, header always starts with "eyJ".
-    value.starts_with("eyJ") && value.matches('.').count() == 2
+    if value.starts_with("eyJ") && value.matches('.').count() == 2 {
+        return true;
+    }
+
+    // Database connection URLs with embedded credentials.
+    looks_like_db_url(value) && db_url_has_password(value)
 }
 
-fn redact_sensitive(value: &Value) -> Value {
+/// Show `percent`% of the start and end of `value`, replace the middle with `<redacted>`.
+/// `percent == 0` (or a string too short to split) yields a full `<redacted>`.
+fn mask_partial(value: &str, percent: u8) -> String {
+    if percent == 0 {
+        return "<redacted>".to_string();
+    }
+
+    let chars: Vec<char> = value.chars().collect();
+    let len = chars.len();
+    let pct = usize::from(percent.min(50));
+    let keep = len.saturating_mul(pct) / 100;
+
+    // Need at least one visible char on each side and one hidden in the middle.
+    if keep == 0 || keep.saturating_mul(2) >= len {
+        return "<redacted>".to_string();
+    }
+
+    let start: String = chars[..keep].iter().collect();
+    let end: String = chars[len - keep..].iter().collect();
+    format!("{start}<redacted>{end}")
+}
+
+/// Redact the password segment of a DB URL; fall back to whole-string masking.
+fn mask_db_url(value: &str, percent: u8) -> String {
+    let (jdbc_prefix, candidate) = if let Some(rest) = value.strip_prefix("jdbc:") {
+        ("jdbc:", rest)
+    } else if let Some(rest) = value.strip_prefix("JDBC:") {
+        ("JDBC:", rest)
+    } else {
+        ("", value)
+    };
+
+    let Some((scheme, rest)) = candidate.split_once("://") else {
+        return mask_partial(value, percent);
+    };
+    let Some((userinfo, host_and_rest)) = rest.split_once('@') else {
+        return value.to_string();
+    };
+    let Some((user, password)) = userinfo.split_once(':') else {
+        return value.to_string();
+    };
+
+    let masked_password = mask_partial(password, percent);
+    format!("{jdbc_prefix}{scheme}://{user}:{masked_password}@{host_and_rest}")
+}
+
+fn mask_secret(value: &str, percent: u8) -> String {
+    if looks_like_db_url(value) && db_url_has_password(value) {
+        mask_db_url(value, percent)
+    } else {
+        mask_partial(value, percent)
+    }
+}
+
+fn redact_sensitive(value: &Value, percent: u8) -> Value {
     match value {
         Value::Object(map) => Value::Object(
             map.iter()
                 .map(|(key, val)| {
                     let new_val = if diff::is_sensitive_path(key) {
-                        Value::String("<redacted>".to_string())
+                        match val {
+                            Value::String(s) => Value::String(mask_secret(s, percent)),
+                            _ => Value::String("<redacted>".to_string()),
+                        }
                     } else {
-                        redact_sensitive(val)
+                        redact_sensitive(val, percent)
                     };
                     (key.clone(), new_val)
                 })
                 .collect(),
         ),
-        Value::Array(arr) => Value::Array(arr.iter().map(redact_sensitive).collect()),
+        Value::Array(arr) => {
+            Value::Array(arr.iter().map(|v| redact_sensitive(v, percent)).collect())
+        }
         Value::String(s) if looks_like_secret_value(s) => {
-            Value::String("<redacted>".to_string())
+            Value::String(mask_secret(s, percent))
         }
         other => other.clone(),
     }
@@ -493,8 +608,8 @@ fn main() -> Result<()> {
 
     let mut value = parse_file(&file, cli.format)?;
 
-    if cli.redact {
-        value = redact_sensitive(&value);
+    if let Some(percent) = cli.redact {
+        value = redact_sensitive(&value, percent);
     }
 
     let final_output = match path {

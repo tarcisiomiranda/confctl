@@ -1,3 +1,17 @@
 microservices.toml
 target
 .env
+
+# Local agent skill installs (canonical source is skills/confctl/SKILL.md)
+.agents/
+.claude/
+.codex
+.cursor/
+.grok/
+.opencode/
+.gemini/
+.continue/
+
+# Python
+__pycache__/
+*.py[cod]

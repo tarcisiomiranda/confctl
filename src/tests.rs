@@ -79,7 +79,7 @@ fn test_redact_masks_sensitive_keys_keeps_others() {
         "DEBUG": true
     });
 
-    let redacted = redact_sensitive(&data);
+    let redacted = redact_sensitive(&data, 0);
 
     assert_eq!(redacted["DATABASE_HOST"], json!("192.0.2.9"));
     assert_eq!(redacted["DEBUG"], json!(true));
@@ -95,7 +95,7 @@ fn test_redact_masks_pass_and_pwd_key_variants() {
         "DB_HOST": "192.0.2.9"
     });
 
-    let redacted = redact_sensitive(&data);
+    let redacted = redact_sensitive(&data, 0);
 
     assert_eq!(redacted["DB_PASS"], json!("<redacted>"));
     assert_eq!(redacted["REDIS_PWD"], json!("<redacted>"));
@@ -112,7 +112,7 @@ fn test_redact_masks_secret_shaped_values_regardless_of_key() {
         "FRONTEND_URL": "https://example.com/app"
     });
 
-    let redacted = redact_sensitive(&data);
+    let redacted = redact_sensitive(&data, 0);
 
     assert_eq!(redacted["GITHUB_CLONE"], json!("<redacted>"));
     assert_eq!(redacted["SESSION"], json!("<redacted>"));
@@ -130,13 +130,95 @@ fn test_redact_recurses_nested_objects_and_arrays() {
         "secrets": {"stripe": "sk_live_x"}
     });
 
-    let redacted = redact_sensitive(&data);
+    let redacted = redact_sensitive(&data, 0);
 
     assert_eq!(redacted["services"][0]["name"], json!("api"));
     assert_eq!(redacted["services"][0]["port"], json!(8080));
     assert_eq!(redacted["services"][0]["auth_token"], json!("<redacted>"));
     // A sensitive key masks its whole subtree, not just scalars.
     assert_eq!(redacted["secrets"], json!("<redacted>"));
+}
+
+#[test]
+fn test_redact_masks_postgres_and_other_db_urls() {
+    let data = json!({
+        "DATABASE_URL": "postgres://admin:s3cretpass@db.example.com:5432/app",
+        "PG": "postgresql://u:p@localhost/db",
+        "MONGO": "mongodb+srv://user:pwd@cluster0.example.mongodb.net/app",
+        "REDIS": "redis://:cachepass@127.0.0.1:6379/0",
+        "JDBC": "jdbc:postgresql://admin:s3cret@db:5432/app",
+        // No password → not treated as a secret-shaped value.
+        "LOCAL_PG": "postgres://localhost:5432/app",
+        "USER_ONLY": "postgres://admin@localhost/app",
+        "HTTPS": "https://example.com/path"
+    });
+
+    let redacted = redact_sensitive(&data, 0);
+
+    assert_eq!(
+        redacted["DATABASE_URL"],
+        json!("postgres://admin:<redacted>@db.example.com:5432/app")
+    );
+    assert_eq!(
+        redacted["PG"],
+        json!("postgresql://u:<redacted>@localhost/db")
+    );
+    assert_eq!(
+        redacted["MONGO"],
+        json!("mongodb+srv://user:<redacted>@cluster0.example.mongodb.net/app")
+    );
+    assert_eq!(
+        redacted["REDIS"],
+        json!("redis://:<redacted>@127.0.0.1:6379/0")
+    );
+    assert_eq!(
+        redacted["JDBC"],
+        json!("jdbc:postgresql://admin:<redacted>@db:5432/app")
+    );
+    assert_eq!(redacted["LOCAL_PG"], json!("postgres://localhost:5432/app"));
+    assert_eq!(redacted["USER_ONLY"], json!("postgres://admin@localhost/app"));
+    assert_eq!(redacted["HTTPS"], json!("https://example.com/path"));
+}
+
+#[test]
+fn test_redact_percent_shows_start_and_end() {
+    // 20 chars → 20% keep = 4 chars each side.
+    let data = json!({
+        "API_KEY": "abcdefghijklmnopqrst",
+        "DB_PASS": "supersecretpassword!!"
+    });
+
+    let redacted = redact_sensitive(&data, 20);
+
+    assert_eq!(redacted["API_KEY"], json!("abcd<redacted>qrst"));
+    // "supersecretpassword!!" is 22 chars → 20% = 4
+    assert_eq!(redacted["DB_PASS"], json!("supe<redacted>rd!!"));
+}
+
+#[test]
+fn test_redact_percent_on_db_url_masks_only_password() {
+    let data = json!({
+        "DATABASE_URL": "postgres://admin:s3cretpassword@db.example.com:5432/app"
+    });
+
+    // password "s3cretpassword" = 14 chars → 20% keep = 2
+    let redacted = redact_sensitive(&data, 20);
+
+    assert_eq!(
+        redacted["DATABASE_URL"],
+        json!("postgres://admin:s3<redacted>rd@db.example.com:5432/app")
+    );
+}
+
+#[test]
+fn test_mask_partial_too_short_falls_back_to_full() {
+    // Too short for a meaningful split at 20%.
+    assert_eq!(mask_partial("ab", 20), "<redacted>");
+    // keep*2 == len → full redact (nothing left for the middle).
+    assert_eq!(mask_partial("abcd", 50), "<redacted>");
+    assert_eq!(mask_partial("abcdefghij", 0), "<redacted>");
+    // 5 chars at 50% → keep=2, middle of 1 → partial works.
+    assert_eq!(mask_partial("short", 50), "sh<redacted>rt");
 }
 
 #[test]

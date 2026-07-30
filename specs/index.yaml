@@ -3,7 +3,7 @@
 # CLI → parser → resolver → output, with transform as an optional post-step,
 # and build as cross-cutting infra.
 
-last_updated: "2026-07-12"
+last_updated: "2026-07-30"
 
 # Domain ordering below reflects the two data flows:
 #   1. Local querying:  cli → parser → resolver → output (+ transform)
@@ -49,4 +49,4 @@ domains:
 
   - name: build
     file: build.yaml
-    summary: "Build targets, mise tasks, Dockerfile, install.sh, and the GitHub Actions CI/release pipelines."
+    summary: "Build targets, mise tasks, Dockerfile, install.sh, agent skills installer (Claude/Codex/Cursor/Grok/…), and the GitHub Actions CI/release pipelines."

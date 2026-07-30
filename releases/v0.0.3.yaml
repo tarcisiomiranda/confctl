@@ -1,0 +1,11 @@
+tag: v0.0.3
+title: Stdin UX + Format Override
+
+features:
+  - "**Stdin-first workflow** — piped input uses stdin automatically; single-argument pipe usage works as a path query (e.g. `… | confctl 0.login`)"
+  - "**`--format <json|yaml|toml|env>`** — optional format override for stdin and extensionless input"
+  - "**Interactive mini tutorial** — running confctl without file and without stdin shows quick usage examples"
+
+changes:
+  - "Better format auto-detection for extensionless input"
+  - "Tests moved to `src/tests.rs` for cleaner project structure"

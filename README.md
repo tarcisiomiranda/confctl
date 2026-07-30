@@ -28,6 +28,15 @@ Or install a specific version:
 curl -fsSL https://raw.githubusercontent.com/tarcisiomiranda/confctl/main/install.sh | bash -s v0.0.3
 ```
 
+**Agent skills are off by default.** To also detect AI tools on the machine (Claude Code, Codex, OpenCode, Cursor, **Grok**, …) and install the confctl `SKILL.md` (teaches safe `-r` / `-r 10` / `-r 20` usage):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tarcisiomiranda/confctl/main/install.sh \
+  | CONFCTL_INSTALL_SKILLS=1 bash
+```
+
+Truthy values for `CONFCTL_INSTALL_SKILLS`: `1`, `true`, `yes`, `on`.
+
 ### Available binaries
 
 | Binary | Platform |
@@ -136,7 +145,7 @@ Masks sensitive values with `<redacted>`, keeping everything else visible. Outpu
 Two detection layers:
 
 - **By key** (case-insensitive substring): `PASS`, `PWD`, `SECRET`, `TOKEN`, `KEY`, `HASH`, `CREDENTIAL`
-- **By value shape**, regardless of key: GitHub tokens (`ghp_*`, `github_pat_*`, …), GitLab (`glpat-*`), Stripe (`sk_live_*`, …), Slack (`xoxb-*`, …), OpenAI/Anthropic-style (`sk-*`), AWS access key IDs (`AKIA*`), Google API keys (`AIza*`), npm/PyPI tokens, JWTs (`eyJ…`), PEM blocks (`-----BEGIN`)
+- **By value shape**, regardless of key: GitHub tokens (`ghp_*`, `github_pat_*`, …), GitLab (`glpat-*`), Stripe (`sk_live_*`, …), Slack (`xoxb-*`, …), OpenAI/Anthropic-style (`sk-*`), AWS access key IDs (`AKIA*`), Google API keys (`AIza*`), npm/PyPI tokens, JWTs (`eyJ…`), PEM blocks (`-----BEGIN`), and **database URLs with embedded credentials** (`postgres://`, `postgresql://`, `mysql://`, `mongodb://`, `redis://`, … — including `jdbc:` prefixes). For DB URLs only the password segment is masked; scheme, user, host, and path stay visible.
 
 ```bash
 confctl .env -r
@@ -147,10 +156,31 @@ confctl .env -r
   "API_KEY": "<redacted>",
   "DATABASE_HOST": "192.0.2.9",
   "DATABASE_PORT": 5432,
+  "DATABASE_URL": "postgres://admin:<redacted>@db.example.com:5432/app",
   "DEBUG": true,
   "POSTGRES_PASSWORD": "<redacted>"
 }
 ```
+
+#### Partial redaction (`-r PERCENT`)
+
+Pass a percentage (0–50) to keep that much of the **start and end** of each secret and mask the middle. Useful when you need to identify *which* secret leaked without exposing the whole value.
+
+```bash
+confctl .env -r 20
+```
+
+```json
+{
+  "API_KEY": "sk-l<redacted>c123",
+  "DATABASE_URL": "postgres://admin:s3<redacted>rd@db.example.com:5432/app",
+  "POSTGRES_PASSWORD": "hunt<redacted>er2"
+}
+```
+
+- `-r` / `-r 0` → full mask (`<redacted>`, or `user:<redacted>@…` for DB URLs)
+- `-r 20` → show 20% of the start **and** 20% of the end
+- Values too short to split safely fall back to a full mask
 
 Works with any format and recurses into nested objects and arrays. `confctl diff` masks secrets by default (`--show-secrets` reveals them there).
 
@@ -217,6 +247,69 @@ Format is detected automatically from the file extension. For `stdin` (`-`) or e
 | `players.0.name` | Array index + key |
 | `titles.la_liga` | Deep key |
 | `season` | Top-level key (returns the whole object) |
+
+---
+
+## Release notes (YAML)
+
+Hand-written GitHub release bodies live under `releases/<tag>.yaml` (same model as Stacker). The publisher prefers that file and falls back to conventional-commit subjects when it is missing.
+
+```bash
+# Validate the publisher locally
+mise run release:check
+# or: python -m unittest discover -s .github/scripts -p 'test_*.py'
+```
+
+See `releases/README.md` for the schema. Example:
+
+```yaml
+# releases/v0.0.6.yaml
+tag: v0.0.6
+title: Partial redaction
+features:
+  - "**-r 20** — show 20% of start and end of secrets"
+  - "Database URLs — mask only the password segment"
+```
+
+---
+
+## Agent skills (Claude Code, Codex, OpenCode, Cursor, Grok, …)
+
+confctl ships an [Agent Skills](https://agentskills.io/specification)-compatible skill so coding agents query configs with redaction instead of dumping full `.env` files into context.
+
+Canonical source: `skills/confctl/SKILL.md`
+
+The skill teaches agents to prefer:
+
+```bash
+confctl .env -r        # full mask
+confctl .env -r 10     # 10% start + end (identify without full secret)
+confctl .env -r 20     # 20% start + end
+```
+
+```bash
+# Detect which AI agents exist on this machine, then install the skill
+mise run skills:list
+mise run skills:install
+
+# Or call the script directly
+python scripts/install_skills.py --list
+python scripts/install_skills.py              # detected tools only (includes Grok when ~/.grok or grok is present)
+python scripts/install_skills.py --all        # every known path
+python scripts/install_skills.py --only grok  # Grok only
+python scripts/install_skills.py --dry-run
+```
+
+| Tool | Project path | Global path |
+|------|--------------|-------------|
+| Claude Code | `.claude/skills/confctl/` | `~/.claude/skills/confctl/` |
+| OpenAI Codex | `.codex/skills/confctl/` | `~/.codex/skills/confctl/` |
+| OpenCode | `.opencode/skills/confctl/` | `~/.config/opencode/skills/confctl/` |
+| Cursor | `.cursor/skills/confctl/` | `~/.cursor/skills/confctl/` |
+| **Grok / xAI** | `.grok/skills/confctl/` | `~/.grok/skills/confctl/` |
+| Generic | `.agents/skills/confctl/` | `~/.agents/skills/confctl/` |
+
+See `skills/README.md` for details.
 
 ---
 

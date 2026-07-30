@@ -1,0 +1,12 @@
+# Hand-written release notes for v0.0.5.
+# Used by .github/scripts/release.py for the GitHub Release body.
+
+tag: v0.0.5
+title: In-place .env Editing
+
+highlights: |
+  Built for scripts and AI agents that need to mutate a .env without reading its contents.
+
+features:
+  - "**`confctl set <file> KEY=VALUE ...`** — add or update keys in a .env file in place; preserves comments, blank lines, ordering, `export` prefixes, and inline `#` comments; auto-quotes values containing spaces or `#`; creates the file when missing"
+  - "**`confctl unset <file> KEY ...`** — remove keys; idempotent (missing keys are reported but exit 0); commented-out lines (`# KEY=old`) are never matched"

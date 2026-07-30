@@ -1,63 +1,105 @@
 domain: transform
-summary: "Optional transforms applied before printing: base64 encode/decode of the resolved value, and opt-in secret redaction of the parsed tree (--redact)."
-last_updated: "2026-07-12"
+summary: "Optional transforms applied before printing: base64 encode/decode of the resolved value, and opt-in secret redaction of the parsed tree (--redact [PERCENT])."
+last_updated: "2026-07-30"
 
 modules:
   - path: src/main.rs
-    role: "Holds apply_base64_transform, redact_sensitive, plus the --encode / --decode / --redact wiring inside main()."
+    role: "Holds apply_base64_transform, redact_sensitive, mask_secret / mask_partial / mask_db_url, plus the --encode / --decode / --redact wiring inside main()."
 
 functions:
   - symbol: apply_base64_transform
-    path: src/main.rs#L281-L292
+    path: src/main.rs
     signature: "fn apply_base64_transform(input: &str, decode: bool, encode: bool) -> Result<String>"
     role: "If decode → base64-decode the trimmed string, require valid UTF-8. If encode → base64-encode. Else pass through."
   - symbol: redact_sensitive
-    path: src/main.rs#L305-L360
-    signature: "fn redact_sensitive(value: &Value) -> Value"
-    role: "Recursively walks the parsed tree; keys matching diff::is_sensitive_path get their whole subtree replaced by \"<redacted>\"; string leaves matching looks_like_secret_value are masked regardless of key."
+    path: src/main.rs
+    signature: "fn redact_sensitive(value: &Value, percent: u8) -> Value"
+    role: "Recursively walks the parsed tree; sensitive keys and secret-shaped string leaves are passed through mask_secret(percent). Non-string sensitive subtrees still become full \"<redacted>\"."
   - symbol: looks_like_secret_value
-    path: src/main.rs#L305-L335
+    path: src/main.rs
     signature: "fn looks_like_secret_value(value: &str) -> bool"
-    role: "Value-shape detection: known secret prefixes (ghp_, glpat-, sk-, sk_live_, xoxb-, npm_, AKIA, AIza, -----BEGIN, …) plus JWT structure (eyJ + two dots)."
+    role: "Value-shape detection: known secret prefixes (ghp_, glpat-, sk-, sk_live_, xoxb-, npm_, AKIA, AIza, -----BEGIN, …), JWT structure (eyJ + two dots), and DB URLs with embedded passwords."
+  - symbol: looks_like_db_url
+    path: src/main.rs
+    signature: "fn looks_like_db_url(value: &str) -> bool"
+    role: "True for postgres/postgresql/mysql/mongodb/redis/amqp/… schemes (optional jdbc: prefix)."
+  - symbol: db_url_has_password
+    path: src/main.rs
+    signature: "fn db_url_has_password(value: &str) -> bool"
+    role: "True when userinfo contains a colon (user:password@host)."
+  - symbol: mask_secret
+    path: src/main.rs
+    signature: "fn mask_secret(value: &str, percent: u8) -> String"
+    role: "Dispatches to mask_db_url for credentialed DB URLs, else mask_partial."
+  - symbol: mask_partial
+    path: src/main.rs
+    signature: "fn mask_partial(value: &str, percent: u8) -> String"
+    role: "percent==0 → full <redacted>; else keep percent% of start and end (capped at 50), middle becomes <redacted>. Too-short strings fall back to full mask."
+  - symbol: mask_db_url
+    path: src/main.rs
+    signature: "fn mask_db_url(value: &str, percent: u8) -> String"
+    role: "Replaces only the password segment of scheme://user:password@host…; keeps scheme, user, host, path."
   - symbol: is_sensitive_path
-    path: src/diff.rs#L256-L261
+    path: src/diff.rs
     signature: "pub(crate) fn is_sensitive_path(path: &str) -> bool"
     role: "Case-insensitive substring match against PASS, PWD, SECRET, TOKEN, KEY, HASH, CREDENTIAL — shared by diff masking and --redact."
 
 cli_surface:
   - flag: "--decode"
     short: "-d"
-    path: src/main.rs#L24-L25
+    path: src/main.rs
     role: "Treat the resolved value as base64 and decode it to UTF-8."
   - flag: "--encode"
     short: "-e"
-    path: src/main.rs#L27-L28
+    path: src/main.rs
     role: "Base64-encode the resolved value; without a path, encodes the full pretty-JSON dump."
+  - flag: "--redact"
+    short: "-r"
+    path: src/main.rs
+    role: "Optional PERCENT 0–50 (default missing value 0). Full or partial secret masking of the parsed tree before print."
 
 mutual_exclusivity:
   note: "clap enforces --decode and --encode as mutually exclusive via `conflicts_with`."
-  path: src/main.rs#L24-L28
+  path: src/main.rs
 
 behaviours:
   - name: trim-on-decode
-    path: src/main.rs#L283-L285
+    path: src/main.rs
     role: "Input is trimmed before decoding to tolerate trailing newlines from shell pipelines."
   - name: utf8-required
-    path: src/main.rs#L286
+    path: src/main.rs
     role: "Decoded bytes must be valid UTF-8; arbitrary binary payloads will error out."
   - name: raw-print
-    path: src/main.rs#L352-L353
+    path: src/main.rs
     role: "When either flag is active, output is emitted with `print!` (no newline, no colour)."
   - name: full-file-encode
-    path: src/main.rs#L361-L364
+    path: src/main.rs
     role: "`--encode` without a path encodes the pretty-printed JSON of the whole Value."
+  - name: db-url-password-only
+    path: src/main.rs
+    role: "Credentialed DB URLs keep scheme/user/host/path; only the password segment is masked."
+  - name: partial-percent
+    path: src/main.rs
+    role: "`-r N` keeps N% of start and end of each secret string; N=0 is full mask."
 
 dependencies:
   - crate: base64
     version_note: "0.22 — uses STANDARD engine from base64::engine::general_purpose."
     role: "Encoding and decoding."
 
-tests: []  # Covered only manually via CLI; no dedicated unit test yet — candidate for a future PR.
+tests:
+  - name: test_redact_masks_postgres_and_other_db_urls
+    path: src/tests.rs
+    covers: "DB URL password masking; non-credentialed URLs left alone."
+  - name: test_redact_percent_shows_start_and_end
+    path: src/tests.rs
+    covers: "Partial redaction keeps percent% of start and end."
+  - name: test_redact_percent_on_db_url_masks_only_password
+    path: src/tests.rs
+    covers: "Partial percent applies to the password segment of a postgres URL."
+  - name: test_mask_partial_too_short_falls_back_to_full
+    path: src/tests.rs
+    covers: "Short strings and percent=0 fall back to full <redacted>."
 
 related:
   - domain: cli

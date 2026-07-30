@@ -1,6 +1,6 @@
 domain: cli
 summary: "Argument parsing, stdin/tty heuristics, and the main() dispatch that wires every other domain together."
-last_updated: "2026-07-12"
+last_updated: "2026-07-30"
 
 modules:
   - path: src/main.rs
@@ -52,8 +52,8 @@ cli_surface:
     role: "Base64-encode the resolved value (or the full JSON dump) before printing. Conflicts with --decode."
   - flag: "--redact"
     short: "-r"
-    path: src/main.rs#L33-L36
-    role: "Opt-in masking: keys matching PASS, PWD, SECRET, TOKEN, KEY, HASH, CREDENTIAL and secret-shaped values (ghp_*, sk-*, AKIA*, JWT, PEM) print as <redacted>. Safe to paste into logs/AI chats."
+    path: src/main.rs
+    role: "Opt-in masking: keys matching PASS, PWD, SECRET, TOKEN, KEY, HASH, CREDENTIAL and secret-shaped values (ghp_*, sk-*, AKIA*, JWT, PEM, credentialed DB URLs). Optional PERCENT 0–50 shows that % of start and end; omit/0 = full <redacted>. Safe to paste into logs/AI chats."
   - flag: "--compact"
     short: "-c"
     path: src/main.rs#L38-L40

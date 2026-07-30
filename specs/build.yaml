@@ -1,6 +1,6 @@
 domain: build
 summary: "Build targets, mise tasks, Dockerfile, install.sh, and the GitHub Actions CI/release pipelines."
-last_updated: "2026-07-12"
+last_updated: "2026-07-30"  # release YAML notes + stacker-style publisher
 
 version:
   current: "0.0.5"
@@ -9,8 +9,10 @@ version:
       role: "Single line — bumped on release via `chore(release)` commits."
     - path: Cargo.toml
       role: "`[package].version` — kept in sync with VERSION."
+    - path: releases/
+      role: "Hand-written per-tag YAML notes (releases/vX.Y.Z.yaml) preferred by release.py."
     - path: releases_notes.toml
-      role: "Per-version title + body consumed by the release tooling."
+      role: "DEPRECATED — historical pointer; release.py uses releases/*.yaml only."
 
 toolchain:
   rust: "1.91.1"
@@ -61,6 +63,21 @@ mise_tasks:
   - name: "fmt:check"
     path: .mise.toml
     role: "`cargo fmt -- --check` — used by CI."
+  - name: "skills:list"
+    path: .mise.toml
+    role: "List AI agents detected on this machine (`python scripts/install_skills.py --list`)."
+  - name: "skills:install"
+    path: .mise.toml
+    role: "Install confctl SKILL.md for detected agents (Claude, Codex, Cursor, Grok, …)."
+  - name: "skills:install:all"
+    path: .mise.toml
+    role: "Install confctl SKILL.md into every known agent path."
+  - name: "test:skills"
+    path: .mise.toml
+    role: "Unit tests for scripts/install_skills.py."
+  - name: "release:check"
+    path: .mise.toml
+    role: "Compile + unittest release.py and --validate-tag smoke check."
 
 cargo_config:
   - path: .cargo/config.toml
@@ -72,7 +89,19 @@ docker:
 
 install_script:
   - path: install.sh
-    role: "Detects OS/arch (linux/amd64, darwin/arm64, darwin/amd64), downloads the matching binary from GitHub Releases, installs to /usr/local/bin/confctl."
+    role: "Detects OS/arch (linux/amd64, darwin/arm64, darwin/amd64), downloads the matching binary from GitHub Releases, installs to /usr/local/bin/confctl. Optional CONFCTL_INSTALL_SKILLS=1 installs skills/confctl/SKILL.md into detected agent homes (including ~/.grok/skills/confctl)."
+
+agent_skills:
+  - path: skills/confctl/SKILL.md
+    role: "Canonical Agent Skills package — teaches confctl queries and -r / -r 10 / -r 20 redaction for Grok and other agents."
+  - path: skills/README.md
+    role: "Install docs for multi-agent skill paths."
+  - path: scripts/install_skills.py
+    role: "Detects AI tools and copies SKILL.md to project/global skill dirs (Grok: ~/.grok/skills/confctl)."
+  - path: scripts/install-skills.sh
+    role: "Thin sh wrapper around install_skills.py."
+  - path: scripts/test_install_skills.py
+    role: "Unit tests for the skill installer (includes Grok path)."
 
 artefacts:
   - name: confctl-linux-amd64
@@ -93,15 +122,19 @@ github_workflows:
   - name: CD Pipeline - Release
     path: .github/workflows/release.yml
     triggers: ["push to tags v*", "push to main", "workflow_dispatch"]
-    role: "Matrix build of the three artefacts above and publishes a GitHub Release when triggered by a tag."
+    role: "Validates release.py, matrix-builds three binaries, writes checksums.txt, publishes GitHub Release (YAML notes or conventional commits)."
   - name: Auto Tag (Manual)
     path: .github/workflows/tag.yml
     triggers: ["workflow_dispatch"]
-    role: "Runs .github/scripts/release.py (Python 3.12 + requests) to compute and push the next semver tag."
+    role: "Runs release.py --bump-tag to create and push the next patch SemVer tag."
 
 release_script:
   - path: .github/scripts/release.py
-    role: "Python helper invoked by tag.yml to create and push the next tag; reads releases_notes.toml for the body."
+    role: "Stdlib GitHub publisher: verifies confctl-* + checksums.txt; body from releases/<tag>.yaml or commit subjects; --bump-tag / --validate-tag."
+  - path: .github/scripts/test_release.py
+    role: "Unit tests for tag validation, YAML notes dialect, conventional commits, and asset checksums."
+  - path: releases/README.md
+    role: "Schema and workflow for hand-written release notes YAML."
 
 related:
   - domain: cli

@@ -3,19 +3,58 @@ name: CD Pipeline - Release
 permissions:
   contents: write
   actions: read
-  id-token: write
 
 on:
   push:
-    tags: ['v*']
-    branches: ['main']
-  workflow_dispatch: {}
+    tags: ["v*"]
+    branches: ["main"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "SemVer tag to publish, for example v0.0.6 (defaults to GITHUB_REF_NAME / latest on main)"
+        required: false
+        type: string
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
 jobs:
+  test-release-script:
+    name: Validate release publisher
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Test release publisher
+        run: |
+          python -m py_compile .github/scripts/release.py .github/scripts/test_release.py
+          python -m unittest discover -s .github/scripts -p 'test_*.py'
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            python .github/scripts/release.py --validate-tag "$RELEASE_TAG"
+          elif [ -n "${{ inputs.tag }}" ]; then
+            python .github/scripts/release.py --validate-tag "${{ inputs.tag }}"
+          else
+            python .github/scripts/release.py --validate-tag v0.0.0
+          fi
+
   build:
     name: Build - ${{ matrix.target }}
+    needs: test-release-script
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
@@ -37,7 +76,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: '1.91.1'
+          toolchain: "1.91.1"
           targets: ${{ matrix.target }}
 
       - name: Install MUSL toolchain
@@ -70,18 +109,21 @@ jobs:
         with:
           name: ${{ matrix.binary_name }}
           path: ${{ matrix.binary_name }}
+          if-no-files-found: error
           retention-days: 7
 
   release:
     name: Create Release
     needs: build
     runs-on: ubuntu-latest
-    if: github.ref_type == 'tag' || github.ref == 'refs/heads/main'
+    if: github.ref_type == 'tag' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
+          # Full history + tags: release.py prefers releases/<tag>.yaml notes,
+          # and falls back to commit subjects since the previous SemVer tag.
           fetch-depth: 0
           token: ${{ github.token }}
 
@@ -89,42 +131,50 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
+          pattern: confctl-*
+          merge-multiple: true
 
-      - name: Prepare binaries
+      - name: Prepare binaries and checksums
         run: |
           mkdir -p release
-          find artifacts -type f -name 'confctl-*' -exec cp {} release/ \;
-          ls -la release/
+          # Support both merged and nested artifact layouts
+          if ls artifacts/confctl-* 1>/dev/null 2>&1; then
+            cp artifacts/confctl-* release/
+          else
+            find artifacts -type f -name 'confctl-*' -exec cp {} release/ \;
+          fi
+          cd release
+          sha256sum confctl-* > checksums.txt
+          ls -la
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
-      - name: Install Python dependencies
-        run: pip install requests
-
-      - name: Debug environment
-        run: |
-          echo "GITHUB_REF: $GITHUB_REF"
-          echo "GITHUB_REF_TYPE: $GITHUB_REF_TYPE"
-          echo "Binaries to upload:"
-          ls -la release/
-
-      - name: Create Release
+      - name: Publish GitHub Release
         run: python .github/scripts/release.py
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          GIT_SSH_COMMAND: 'ssh -o StrictHostKeyChecking=no'
+          # On main branch pushes, refresh assets on the latest SemVer tag.
           UPDATE_LATEST_RELEASE: ${{ github.ref_type == 'branch' && 'true' || 'false' }}
+          # When workflow_dispatch supplies a tag, prefer it.
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || env.RELEASE_TAG }}
 
       - name: Release Summary
         if: success()
         run: |
-          echo "### Release Published!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "#### Binaries:" >> $GITHUB_STEP_SUMMARY
-          for f in release/*; do
-            SIZE=$(stat -c%s "$f" 2>/dev/null || stat -f%z "$f")
-            echo "- $(basename $f): $(numfmt --to=iec-i --suffix=B $SIZE 2>/dev/null || echo $SIZE bytes)" >> $GITHUB_STEP_SUMMARY
-          done
+          {
+            echo "### Release published"
+            echo ""
+            echo "#### Binaries"
+            for f in release/confctl-*; do
+              SIZE=$(stat -c%s "$f" 2>/dev/null || stat -f%z "$f")
+              echo "- $(basename "$f"): ${SIZE} bytes"
+            done
+            echo "- checksums.txt"
+            if [ -f releases/"${RELEASE_TAG}.yaml" ] || [ -f releases/"${RELEASE_TAG}.yml" ]; then
+              echo ""
+              echo "Notes source: \`releases/${RELEASE_TAG}.yaml\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,7 @@
+tag: v0.0.1
+title: Initial Release
+
+features:
+  - "Read and convert JSON, YAML and TOML files"
+  - "Path navigation using dot notation (e.g. `clubs.0.name`)"
+  - "Pretty-printed JSON output"
