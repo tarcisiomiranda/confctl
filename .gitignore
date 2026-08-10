@@ -12,6 +12,9 @@ target
 .gemini/
 .continue/
 
+# Superpowers/agent planning docs (local only)
+docs/superpowers/
+
 # Python
 __pycache__/
 *.py[cod]

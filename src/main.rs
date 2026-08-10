@@ -63,10 +63,12 @@ enum Command {
     /// Compare two config files with a human-friendly diff.
     Diff(diff::DiffCli),
 
-    /// Add or update KEY=VALUE entries in a .env file, preserving comments.
+    /// Add or update KEY=VALUE entries in a config file (.env, .json, .yaml, .toml).
+    /// Dotted paths supported for JSON/YAML/TOML (e.g. db.port=5432).
     Set(env_edit::SetCli),
 
-    /// Remove keys from a .env file, preserving comments.
+    /// Remove keys from a config file (.env, .json, .yaml, .toml).
+    /// Dotted paths supported for JSON/YAML/TOML (e.g. db.port).
     Unset(env_edit::UnsetCli),
 
     /// Push/pull secret files to a Bunker Vault server.

@@ -1,0 +1,16 @@
+tag: v0.0.7
+title: In-place editing for JSON, YAML, and TOML
+
+highlights: |
+  `confctl set` and `confctl unset` now work on JSON, YAML, and TOML files —
+  not just .env. Dotted paths, type coercion, and comment preservation included.
+
+features:
+  - "**JSON/YAML/TOML set/unset** — `confctl set config.json key=value` updates the field in-place; `confctl unset` removes it. Format detected from extension."
+  - "**Dotted-path support** — traverse nested objects and tables: `confctl set config.yaml db.host=10.0.0.5 db.port=5432`"
+  - "**Type coercion** — existing number/bool fields keep their type when the new value is compatible (`port=9090` stays integer; `debug=true` stays boolean)"
+  - "**TOML comment preservation** — TOML editing uses `toml_edit` under the hood, so comments and formatting survive round-trips"
+  - "**JSON key-order preservation** — `serde_json` now built with `preserve_order` feature; field order is maintained after serialization"
+
+fixes:
+  - "Bug: `confctl set` on a .json/.yaml/.toml file silently appended `KEY=VALUE` as plain text, corrupting the file"
