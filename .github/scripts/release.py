@@ -618,8 +618,11 @@ def update_version_file(tag: str, token: str, repository: str) -> None:
 def resolve_release_tag() -> str:
     """Pick the tag to publish from env (RELEASE_TAG, ref name, or latest)."""
     explicit = os.environ.get("RELEASE_TAG", "").strip()
-    if explicit:
-        return validate_tag(explicit)
+    # Only treat RELEASE_TAG as an override when it is a valid SemVer tag.
+    # A branch name (e.g. "main") is NOT a tag override — fall through to
+    # UPDATE_LATEST_RELEASE / GITHUB_REF_TYPE logic below.
+    if explicit and TAG_PATTERN.fullmatch(explicit):
+        return explicit
 
     ref_type = os.environ.get("GITHUB_REF_TYPE", "").strip()
     ref_name = os.environ.get("GITHUB_REF_NAME", "").strip()
