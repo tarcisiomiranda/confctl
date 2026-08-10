@@ -122,7 +122,12 @@ impl GcpBackend {
     }
 
     fn adc_credentials_path(&self) -> Option<PathBuf> {
-        if let Some(p) = self.cfg.gcp.as_ref().and_then(|c| c.credentials_file.clone()) {
+        if let Some(p) = self
+            .cfg
+            .gcp
+            .as_ref()
+            .and_then(|c| c.credentials_file.clone())
+        {
             return Some(p);
         }
         if let Ok(p) = std::env::var("GOOGLE_APPLICATION_CREDENTIALS") {
@@ -309,7 +314,11 @@ impl Backend for GcpBackend {
 
         self.cfg.gcp = Some(GcpConfig {
             project: project.clone(),
-            credentials_file: self.cfg.gcp.as_ref().and_then(|c| c.credentials_file.clone()),
+            credentials_file: self
+                .cfg
+                .gcp
+                .as_ref()
+                .and_then(|c| c.credentials_file.clone()),
         });
         self.cfg.backend = Some(BackendKind::Gcp);
 
@@ -392,9 +401,7 @@ impl Backend for GcpBackend {
                 out.push(Entry {
                     id: short_id(&s.name),
                     name: short_id(&s.name),
-                    size: annotations
-                        .get("confctl-size")
-                        .and_then(|v| v.parse().ok()),
+                    size: annotations.get("confctl-size").and_then(|v| v.parse().ok()),
                     updated_at,
                     labels,
                     filename: annotations.get("confctl-filename").cloned(),
@@ -441,9 +448,8 @@ impl Backend for GcpBackend {
             Ok(_) => {}
             Err(ureq::Error::Status(409, _)) if req.overwrite => {
                 // Exists — refresh annotations, then add a new version below.
-                let patch_url = self.url(&format!(
-                    "/secrets/{secret_id}?updateMask=annotations"
-                ))?;
+                let patch_url =
+                    self.url(&format!("/secrets/{secret_id}?updateMask=annotations"))?;
                 self.authed(self.agent.request("PATCH", &patch_url))?
                     .send_json(json!({"annotations": annotations}))
                     .map_err(map_gcp_err)
@@ -500,7 +506,10 @@ impl Backend for GcpBackend {
         let filename = self
             .fetch_secret_meta(&secret_id)
             .ok()
-            .and_then(|s| s.annotations.and_then(|a| a.get("confctl-filename").cloned()))
+            .and_then(|s| {
+                s.annotations
+                    .and_then(|a| a.get("confctl-filename").cloned())
+            })
             .or(Some(secret_id));
         Ok(PulledSecret { bytes, filename })
     }

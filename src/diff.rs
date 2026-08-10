@@ -22,9 +22,19 @@ pub(crate) struct DiffCli {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum DiffChange {
-    Added { path: String, value: Value },
-    Removed { path: String, value: Value },
-    Changed { path: String, old: Value, new: Value },
+    Added {
+        path: String,
+        value: Value,
+    },
+    Removed {
+        path: String,
+        value: Value,
+    },
+    Changed {
+        path: String,
+        old: Value,
+        new: Value,
+    },
 }
 
 enum DiffInput {
@@ -209,7 +219,12 @@ pub(crate) fn format_structural_diff(
                 } else {
                     format_diff_value(value)
                 };
-                lines.push(format!("{} {} = {}", marker("+", use_color), path, rendered));
+                lines.push(format!(
+                    "{} {} = {}",
+                    marker("+", use_color),
+                    path,
+                    rendered
+                ));
             }
         }
         sections.push(lines.join("\n"));
@@ -228,7 +243,12 @@ pub(crate) fn format_structural_diff(
                 } else {
                     format_diff_value(value)
                 };
-                lines.push(format!("{} {} = {}", marker("-", use_color), path, rendered));
+                lines.push(format!(
+                    "{} {} = {}",
+                    marker("-", use_color),
+                    path,
+                    rendered
+                ));
             }
         }
         sections.push(lines.join("\n"));
@@ -255,9 +275,17 @@ fn format_diff_value(value: &Value) -> String {
 
 pub(crate) fn is_sensitive_path(path: &str) -> bool {
     let upper = path.to_ascii_uppercase();
-    ["PASS", "PWD", "SECRET", "TOKEN", "KEY", "HASH", "CREDENTIAL"]
-        .iter()
-        .any(|needle| upper.contains(needle))
+    [
+        "PASS",
+        "PWD",
+        "SECRET",
+        "TOKEN",
+        "KEY",
+        "HASH",
+        "CREDENTIAL",
+    ]
+    .iter()
+    .any(|needle| upper.contains(needle))
 }
 
 pub(crate) fn format_text_diff(left: &str, right: &str, use_color: bool) -> String {
@@ -270,11 +298,19 @@ pub(crate) fn format_text_diff(left: &str, right: &str, use_color: bool) -> Stri
 
     for (next_left, next_right) in pairs {
         while left_index < next_left {
-            output.push(format!("{} {}", marker("-", use_color), left_lines[left_index]));
+            output.push(format!(
+                "{} {}",
+                marker("-", use_color),
+                left_lines[left_index]
+            ));
             left_index += 1;
         }
         while right_index < next_right {
-            output.push(format!("{} {}", marker("+", use_color), right_lines[right_index]));
+            output.push(format!(
+                "{} {}",
+                marker("+", use_color),
+                right_lines[right_index]
+            ));
             right_index += 1;
         }
         output.push(format!("  {}", left_lines[next_left]));
@@ -283,11 +319,19 @@ pub(crate) fn format_text_diff(left: &str, right: &str, use_color: bool) -> Stri
     }
 
     while left_index < left_lines.len() {
-        output.push(format!("{} {}", marker("-", use_color), left_lines[left_index]));
+        output.push(format!(
+            "{} {}",
+            marker("-", use_color),
+            left_lines[left_index]
+        ));
         left_index += 1;
     }
     while right_index < right_lines.len() {
-        output.push(format!("{} {}", marker("+", use_color), right_lines[right_index]));
+        output.push(format!(
+            "{} {}",
+            marker("+", use_color),
+            right_lines[right_index]
+        ));
         right_index += 1;
     }
 

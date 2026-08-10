@@ -522,9 +522,7 @@ fn redact_sensitive(value: &Value, percent: u8) -> Value {
         Value::Array(arr) => {
             Value::Array(arr.iter().map(|v| redact_sensitive(v, percent)).collect())
         }
-        Value::String(s) if looks_like_secret_value(s) => {
-            Value::String(mask_secret(s, percent))
-        }
+        Value::String(s) if looks_like_secret_value(s) => Value::String(mask_secret(s, percent)),
         other => other.clone(),
     }
 }
@@ -633,8 +631,7 @@ fn main() -> Result<()> {
             let json_str = if cli.compact {
                 serde_json::to_string(&value).context("Failed to serialize value to JSON")?
             } else {
-                serde_json::to_string_pretty(&value)
-                    .context("Failed to serialize value to JSON")?
+                serde_json::to_string_pretty(&value).context("Failed to serialize value to JSON")?
             };
             if cli.encode {
                 let encoded = STANDARD.encode(&json_str);

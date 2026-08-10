@@ -165,9 +165,7 @@ fn coerce_json_value(existing: &serde_json::Value, new_str: &str) -> serde_json:
             if let Ok(n) = new_str.parse::<i64>() {
                 Value::Number(n.into())
             } else if let Ok(f) = new_str.parse::<f64>() {
-                Value::Number(
-                    serde_json::Number::from_f64(f).unwrap_or_else(|| 0.into()),
-                )
+                Value::Number(serde_json::Number::from_f64(f).unwrap_or_else(|| 0.into()))
             } else {
                 Value::String(new_str.to_string())
             }
@@ -242,8 +240,7 @@ fn json_unset_path(root: &mut serde_json::Value, dotted_key: &str) -> Result<boo
 
 fn run_set_json(path: &Path, pairs: &[(&str, &str)]) -> Result<()> {
     let content = if path.exists() {
-        std::fs::read_to_string(path)
-            .with_context(|| format!("reading {}", path.display()))?
+        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?
     } else {
         "{}".to_string()
     };
@@ -257,8 +254,7 @@ fn run_set_json(path: &Path, pairs: &[(&str, &str)]) -> Result<()> {
         report.push((key.to_string(), outcome));
     }
 
-    let new_content =
-        serde_json::to_string_pretty(&root).context("serializing JSON")?;
+    let new_content = serde_json::to_string_pretty(&root).context("serializing JSON")?;
     std::fs::write(path, new_content + "\n")
         .with_context(|| format!("writing {}", path.display()))?;
 
@@ -267,8 +263,8 @@ fn run_set_json(path: &Path, pairs: &[(&str, &str)]) -> Result<()> {
 }
 
 fn run_unset_json(path: &Path, keys: &[&str]) -> Result<()> {
-    let content = std::fs::read_to_string(path)
-        .with_context(|| format!("reading {}", path.display()))?;
+    let content =
+        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
 
     let mut root: serde_json::Value = serde_json::from_str(&content)
         .with_context(|| format!("parsing JSON: {}", path.display()))?;
@@ -279,8 +275,7 @@ fn run_unset_json(path: &Path, keys: &[&str]) -> Result<()> {
         report.push((key.to_string(), removed));
     }
 
-    let new_content =
-        serde_json::to_string_pretty(&root).context("serializing JSON")?;
+    let new_content = serde_json::to_string_pretty(&root).context("serializing JSON")?;
     std::fs::write(path, new_content + "\n")
         .with_context(|| format!("writing {}", path.display()))?;
 
@@ -382,8 +377,7 @@ fn yaml_unset_path(root: &mut serde_yaml::Value, dotted_key: &str) -> Result<boo
 
 fn run_set_yaml(path: &Path, pairs: &[(&str, &str)]) -> Result<()> {
     let content = if path.exists() {
-        std::fs::read_to_string(path)
-            .with_context(|| format!("reading {}", path.display()))?
+        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?
     } else {
         String::new()
     };
@@ -398,16 +392,15 @@ fn run_set_yaml(path: &Path, pairs: &[(&str, &str)]) -> Result<()> {
     }
 
     let new_content = serde_yaml::to_string(&root).context("serializing YAML")?;
-    std::fs::write(path, &new_content)
-        .with_context(|| format!("writing {}", path.display()))?;
+    std::fs::write(path, &new_content).with_context(|| format!("writing {}", path.display()))?;
 
     print_report(report);
     Ok(())
 }
 
 fn run_unset_yaml(path: &Path, keys: &[&str]) -> Result<()> {
-    let content = std::fs::read_to_string(path)
-        .with_context(|| format!("reading {}", path.display()))?;
+    let content =
+        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
 
     let mut root: serde_yaml::Value = serde_yaml::from_str(&content)
         .with_context(|| format!("parsing YAML: {}", path.display()))?;
@@ -419,8 +412,7 @@ fn run_unset_yaml(path: &Path, keys: &[&str]) -> Result<()> {
     }
 
     let new_content = serde_yaml::to_string(&root).context("serializing YAML")?;
-    std::fs::write(path, &new_content)
-        .with_context(|| format!("writing {}", path.display()))?;
+    std::fs::write(path, &new_content).with_context(|| format!("writing {}", path.display()))?;
 
     print_unset_report(report);
     Ok(())
@@ -444,13 +436,11 @@ fn coerce_toml_item(existing: &toml_edit::Item, new_str: &str) -> toml_edit::Ite
                 toml_edit::value(new_str)
             }
         }
-        Some(toml_edit::Value::Boolean(_)) => {
-            match new_str.to_ascii_lowercase().as_str() {
-                "true" => toml_edit::value(true),
-                "false" => toml_edit::value(false),
-                _ => toml_edit::value(new_str),
-            }
-        }
+        Some(toml_edit::Value::Boolean(_)) => match new_str.to_ascii_lowercase().as_str() {
+            "true" => toml_edit::value(true),
+            "false" => toml_edit::value(false),
+            _ => toml_edit::value(new_str),
+        },
         _ => toml_edit::value(new_str),
     }
 }
@@ -508,8 +498,7 @@ fn toml_unset_path(doc: &mut toml_edit::DocumentMut, dotted_key: &str) -> Result
 
 fn run_set_toml(path: &Path, pairs: &[(&str, &str)]) -> Result<()> {
     let content = if path.exists() {
-        std::fs::read_to_string(path)
-            .with_context(|| format!("reading {}", path.display()))?
+        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?
     } else {
         String::new()
     };
@@ -524,16 +513,15 @@ fn run_set_toml(path: &Path, pairs: &[(&str, &str)]) -> Result<()> {
         report.push((key.to_string(), outcome));
     }
 
-    std::fs::write(path, doc.to_string())
-        .with_context(|| format!("writing {}", path.display()))?;
+    std::fs::write(path, doc.to_string()).with_context(|| format!("writing {}", path.display()))?;
 
     print_report(report);
     Ok(())
 }
 
 fn run_unset_toml(path: &Path, keys: &[&str]) -> Result<()> {
-    let content = std::fs::read_to_string(path)
-        .with_context(|| format!("reading {}", path.display()))?;
+    let content =
+        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
 
     let mut doc: toml_edit::DocumentMut = content
         .parse()
@@ -545,8 +533,7 @@ fn run_unset_toml(path: &Path, keys: &[&str]) -> Result<()> {
         report.push((key.to_string(), removed));
     }
 
-    std::fs::write(path, doc.to_string())
-        .with_context(|| format!("writing {}", path.display()))?;
+    std::fs::write(path, doc.to_string()).with_context(|| format!("writing {}", path.display()))?;
 
     print_unset_report(report);
     Ok(())
@@ -569,7 +556,11 @@ fn print_unset_report(report: Vec<(String, bool)>) {
         if removed {
             println!("{} removed {}", "✓".green().bold(), key.bold());
         } else {
-            println!("{} {} not found (nothing to remove)", "·".bright_black(), key);
+            println!(
+                "{} {} not found (nothing to remove)",
+                "·".bright_black(),
+                key
+            );
         }
     }
 }

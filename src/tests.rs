@@ -176,7 +176,10 @@ fn test_redact_masks_postgres_and_other_db_urls() {
         json!("jdbc:postgresql://admin:<redacted>@db:5432/app")
     );
     assert_eq!(redacted["LOCAL_PG"], json!("postgres://localhost:5432/app"));
-    assert_eq!(redacted["USER_ONLY"], json!("postgres://admin@localhost/app"));
+    assert_eq!(
+        redacted["USER_ONLY"],
+        json!("postgres://admin@localhost/app")
+    );
     assert_eq!(redacted["HTTPS"], json!("https://example.com/path"));
 }
 
@@ -378,8 +381,14 @@ fn test_auto_secret_name_is_dir_file_date_slug() {
     let name = vault::cli::auto_secret_name(".env");
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
 
-    assert!(name.ends_with(&today), "name should end with today's date: {name}");
-    assert!(name.contains("env"), "name should carry the filename: {name}");
+    assert!(
+        name.ends_with(&today),
+        "name should end with today's date: {name}"
+    );
+    assert!(
+        name.contains("env"),
+        "name should carry the filename: {name}"
+    );
     assert!(
         name.chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'),
