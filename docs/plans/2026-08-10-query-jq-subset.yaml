@@ -1,0 +1,56 @@
+plan: query-jq-subset
+title: "Query jq-like via -q (parser próprio)"
+status: done
+created: "2026-08-10"
+updated: "2026-08-10"
+goal: >
+  Add opt-in jq-subset expressions via -q/--query while keeping legacy dotted
+  path resolve_path unchanged as the default.
+
+context: |
+  confctl path navigation is dotted-only (a.b.0.c). Users want iterate/select/
+  map/construct without replacing the simple mode. Decision: dual surface.
+
+scope:
+  - src/query/{mod,ast,lex,parse,eval,error}.rs
+  - CLI -q/--query conflicts with positional path
+  - Stream multi-value output (one per line)
+  - specs/query.yaml + index/cli/resolver updates
+  - README + skill examples
+
+out_of_scope:
+  - full jq / jaq embed
+  - def, modules, reduce, recurse (..), regex
+  - changing legacy dotted path syntax
+  - query inside set/unset/diff/vault
+
+stages:
+  - id: spec-plan
+    desc: Write specs/query.yaml, plan, update index/cli/resolver
+    status: done
+  - id: query-engine
+    desc: Implement lex/parse/eval for tiers 2-7 subset
+    status: done
+  - id: cli-wire
+    desc: Wire -q in main, stream print, conflict with path
+    status: done
+  - id: tests
+    desc: Unit + integration tests; mise test/clippy
+    status: done
+  - id: docs
+    desc: README + skill -q examples
+    status: done
+
+decisions:
+  - "Legacy path is default; -q is opt-in"
+  - "Both path and -q together = hard error"
+  - "Custom parser, not jaq"
+  - "jq-style syntax inside -q (leading dot)"
+  - "Truthy: false and null only"
+  - "Include // alternative in v1"
+
+risks:
+  - scope creep toward full jq — freeze builtins list in spec
+  - stream semantics edge cases — mirror short jq fixtures in tests
+
+rollback: "Remove -q flag and src/query/; legacy path untouched"

@@ -1,0 +1,21 @@
+tag: v0.0.8
+title: jq-subset query expressions (-q)
+
+highlights: |
+  Opt-in jq-like queries via `-q` / `--query` while keeping the simple dotted
+  path mode unchanged. Iterate, select, map, construct, compare, and more —
+  across JSON, YAML, TOML, and ENV.
+
+features:
+  - "**-q / --query** — jq-subset expression language (parser + stream eval owned by confctl, not an embedded jq)"
+  - "**Legacy dotted path unchanged** — `confctl file a.b.0.c` still works; path and `-q` are mutually exclusive"
+  - "**Iterate + pipe** — `.clubs[] | .name`, multi-stage streams, one result per line"
+  - "**select / map / construct** — `select(.active)`, `map(.x)`, `{id, name}`, `[ expr ]`"
+  - "**Builtins** — `length`, `keys`, `values`, `type`, `empty`"
+  - "**Logic** — `== != < <= > >=`, `and` / `or` / `not`, `if then else end`, `//` alternative"
+  - "**Works with -r** — redaction runs on the tree before the expression"
+  - "**Formats** — same expression over JSON, YAML, TOML, ENV and stdin pipes"
+
+changes:
+  - "New domain `specs/query.yaml` and regression suite (`src/query/suite.rs` + CLI integration tests)"
+  - "README and agent skill document `-q` alongside dotted paths"

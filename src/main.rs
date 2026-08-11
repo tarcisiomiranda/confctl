@@ -10,6 +10,7 @@ use serde_json::{Map, Value};
 
 mod diff;
 mod env_edit;
+mod query;
 mod vault;
 
 #[derive(Parser)]
@@ -53,6 +54,11 @@ struct Cli {
     /// (wl-copy / xclip / xsel / pbcopy, first one found).
     #[arg(long = "copy")]
     copy: bool,
+
+    /// jq-subset expression (opt-in). Conflicts with positional dotted path.
+    /// Examples: `.clubs[].name`, `.[] | select(.active) | {id, name}`
+    #[arg(short = 'q', long = "query")]
+    query: Option<String>,
 
     #[command(subcommand)]
     command: Option<Command>,
@@ -606,44 +612,54 @@ fn main() -> Result<()> {
 
     let (file, path) = resolve_input(cli.file, cli.path, stdin_is_tty)?;
 
+    if cli.query.is_some() && path.is_some() {
+        bail!("use either -q/--query or a dotted path, not both");
+    }
+
     let mut value = parse_file(&file, cli.format)?;
 
     if let Some(percent) = cli.redact {
         value = redact_sensitive(&value, percent);
     }
 
-    let final_output = match path {
-        Some(path) => {
-            let result = resolve_path(&value, &path)?;
-            let output = format_value_with(result, cli.compact);
-            let final_output = apply_base64_transform(&output, cli.decode, cli.encode)?;
+    let final_output = if let Some(expr) = cli.query {
+        let results = query::run(&expr, &value).map_err(|e| anyhow!("{e}"))?;
+        print_query_results(&results, cli.compact, use_color, cli.decode, cli.encode)?
+    } else {
+        match path {
+            Some(path) => {
+                let result = resolve_path(&value, &path)?;
+                let output = format_value_with(result, cli.compact);
+                let final_output = apply_base64_transform(&output, cli.decode, cli.encode)?;
 
-            if cli.decode || cli.encode {
-                print!("{}", final_output);
-            } else if use_color && !cli.compact {
-                println!("{}", format_value_colored(result));
-            } else {
-                println!("{}", final_output);
-            }
-            final_output
-        }
-        None => {
-            let json_str = if cli.compact {
-                serde_json::to_string(&value).context("Failed to serialize value to JSON")?
-            } else {
-                serde_json::to_string_pretty(&value).context("Failed to serialize value to JSON")?
-            };
-            if cli.encode {
-                let encoded = STANDARD.encode(&json_str);
-                print!("{}", encoded);
-                encoded
-            } else {
-                if use_color && !cli.compact {
-                    println!("{}", colorize_json(&value, 0));
+                if cli.decode || cli.encode {
+                    print!("{}", final_output);
+                } else if use_color && !cli.compact {
+                    println!("{}", format_value_colored(result));
                 } else {
-                    println!("{json_str}");
+                    println!("{}", final_output);
                 }
-                json_str
+                final_output
+            }
+            None => {
+                let json_str = if cli.compact {
+                    serde_json::to_string(&value).context("Failed to serialize value to JSON")?
+                } else {
+                    serde_json::to_string_pretty(&value)
+                        .context("Failed to serialize value to JSON")?
+                };
+                if cli.encode {
+                    let encoded = STANDARD.encode(&json_str);
+                    print!("{}", encoded);
+                    encoded
+                } else {
+                    if use_color && !cli.compact {
+                        println!("{}", colorize_json(&value, 0));
+                    } else {
+                        println!("{json_str}");
+                    }
+                    json_str
+                }
             }
         }
     };
@@ -653,6 +669,37 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Format and print a query stream (0..N values). Returns joined plain text for --copy.
+fn print_query_results(
+    results: &[Value],
+    compact: bool,
+    use_color: bool,
+    decode: bool,
+    encode: bool,
+) -> Result<String> {
+    let mut plain_parts = Vec::with_capacity(results.len());
+
+    for (i, result) in results.iter().enumerate() {
+        let output = format_value_with(result, compact);
+        let transformed = apply_base64_transform(&output, decode, encode)?;
+        plain_parts.push(transformed.clone());
+
+        if decode || encode {
+            if i + 1 == results.len() {
+                print!("{transformed}");
+            } else {
+                println!("{transformed}");
+            }
+        } else if use_color && !compact {
+            println!("{}", format_value_colored(result));
+        } else {
+            println!("{transformed}");
+        }
+    }
+
+    Ok(plain_parts.join("\n"))
 }
 
 #[cfg(test)]

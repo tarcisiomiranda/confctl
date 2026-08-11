@@ -1,0 +1,94 @@
+domain: query
+summary: "Opt-in jq-subset expression language via -q/--query. Stream eval over serde_json::Value. Legacy dotted path stays in resolver."
+last_updated: "2026-08-10"
+
+modules:
+  - path: src/query/mod.rs
+    role: "Public run(expr, &Value) -> Result<Vec<Value>>; re-exports."
+  - path: src/query/ast.rs
+    role: "Expr AST nodes for the v1 subset."
+  - path: src/query/lex.rs
+    role: "Tokenizer producing (Token, span) pairs."
+  - path: src/query/parse.rs
+    role: "Recursive-descent parser → Expr."
+  - path: src/query/eval.rs
+    role: "Stream semantics evaluator."
+  - path: src/query/error.rs
+    role: "Parse/eval errors with optional source offset."
+
+functions:
+  - symbol: run
+    path: src/query/mod.rs
+    signature: "pub fn run(source: &str, input: &Value) -> Result<Vec<Value>>"
+    role: "Parse + eval entry point used by main()."
+  - symbol: eval
+    path: src/query/eval.rs
+    signature: "pub fn eval(expr: &Expr, input: &Value) -> Result<Vec<Value>>"
+    role: "Evaluate expression against one input value; may yield 0..N outputs."
+
+cli_surface:
+  - flag: "--query"
+    short: "-q"
+    path: src/main.rs
+    role: "jq-subset expression. Conflicts with positional dotted path."
+
+language_v1:
+  identity_path: [".", ".foo", ".foo.bar", ".[0]", ".[\"k\"]"]
+  iterate: [".[]", ".users[]"]
+  pipe: ["a | b"]
+  construct: ["{id, name}", "{id: .x}", "[ expr ]", "[]"]
+  filters: ["select(expr)", "map(expr)"]
+  builtins: ["length", "keys", "values", "type", "empty"]
+  compare: ["==", "!=", "<", "<=", ">", ">="]
+  logic: ["and", "or", "not"]
+  cond: ["if A then B else C end"]
+  literals: ["null", "true", "false", "number", "string"]
+  parens: ["(expr)"]
+  alternative: ["//"]
+
+behaviours:
+  - name: legacy-path-unchanged
+    role: "Without -q, resolve_path dotted syntax is identical to pre-query releases."
+  - name: mutual-exclusion
+    role: "Providing both -q and a positional path errors."
+  - name: stream-output
+    role: "N results → N lines (scalars unquoted like format_value; containers JSON)."
+  - name: redact-before-query
+    role: "-r applies to the tree before -q runs."
+  - name: truthiness
+    role: "Only false and null are falsy (jq-like)."
+
+out_of_scope_v1:
+  - "def / modules / variables ($x)"
+  - "reduce / foreach / recurse (..)"
+  - "regex"
+  - "input streaming (inputs)"
+  - "comma operator multi-expr"
+  - "try/catch"
+
+tests:
+  - name: query unit tests (lex/parse/eval)
+    path: src/query/
+    covers: "paths, pipe, iterate, select, map, object shorthand, if, compare, //, stream."
+  - name: query regression suite
+    path: src/query/suite.rs
+    covers: >
+      truthiness (0/"" keep, false/null drop), negative index, multi-stage pipe,
+      and/or/alt, construct, builtins arity/errors, parse failures, fixture
+      testdata/config.json (Spain filter, midfielders, path↔-q parity).
+  - name: cli -q integration
+    path: src/tests.rs
+    covers: >
+      stream one-per-line, select+compact, path+-q conflict, legacy path,
+      path↔-q leaf parity, bad syntax exit, missing key exit, empty stream,
+      yaml/toml, stdin pipe, redact-before-query.
+
+related:
+  - domain: cli
+    why: "-q declared on Cli; main() branches before resolve_path."
+  - domain: resolver
+    why: "Path-only domain remains; query is separate."
+  - domain: output
+    why: "Each stream item formatted via format_value_with / color."
+  - domain: transform
+    why: "redact before query; base64 per output value."

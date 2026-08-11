@@ -248,6 +248,46 @@ Format is detected automatically from the file extension. For `stdin` (`-`) or e
 | `titles.la_liga` | Deep key |
 | `season` | Top-level key (returns the whole object) |
 
+This dotted path mode is the **default** and stays fully supported.
+
+## Query expressions (`-q` / `--query`)
+
+Opt-in **jq-subset** for iterate, filter, project, and construct. Does **not**
+replace dotted paths — use one or the other (not both).
+
+```bash
+# Iterate + project
+confctl config.yaml -q '.clubs[] | .name'
+
+# Filter + object construct
+confctl users.json -q '.users[] | select(.active) | {id, name}'
+
+# Builtins
+confctl config.yaml -q '.clubs | length'
+confctl config.yaml -q '.clubs[0] | keys'
+
+# Pipe from curl
+curl -s https://api.github.com/users | confctl -q '.[0] | .login'
+```
+
+### Supported in v1
+
+| Feature | Examples |
+|---|---|
+| Identity / path | `.` `.foo.bar` `.[0]` `.["k"]` |
+| Iterate | `.[]` `.clubs[]` |
+| Pipe | `a \| b` |
+| Construct | `{id, name}` `{id: .x}` `[ expr ]` |
+| Filters | `select(expr)` `map(expr)` |
+| Builtins | `length` `keys` `values` `type` `empty` |
+| Compare / logic | `== != < <= > >=` `and` `or` `not` |
+| Cond / alt | `if A then B else C end` `//` |
+
+**Not in v1:** `def`, variables, `reduce`, recurse `..`, regex, input streaming.
+
+Multi-value results print **one value per line** (jq-style stream). `-r` redacts
+the tree **before** the expression runs.
+
 ---
 
 ## Release notes (YAML)

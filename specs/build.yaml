@@ -1,9 +1,9 @@
 domain: build
 summary: "Build targets, mise tasks, Dockerfile, install.sh, and the GitHub Actions CI/release pipelines."
-last_updated: "2026-07-30"  # release YAML notes + stacker-style publisher
+last_updated: "2026-08-10"  # v0.0.8 query -q
 
 version:
-  current: "0.0.5"
+  current: "0.0.8"
   sources:
     - path: VERSION
       role: "Single line — bumped on release via `chore(release)` commits."

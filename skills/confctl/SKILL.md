@@ -65,19 +65,26 @@ fingerprint. Do not use high percentages (e.g. 50) unless the user asks.
 # Whole file as normalized JSON (redacted)
 confctl app.env -r 20
 
-# Single dotted path
+# Single dotted path (default, simple)
 confctl config.yaml services.api.port
 confctl config.toml database.host
 
 # Arrays use numeric indices
 confctl config.yaml clubs.0.players.1.name
 
+# jq-subset expressions (opt-in; do not mix with dotted path)
+confctl config.yaml -q '.clubs[] | .name'
+confctl users.json -q '.[] | select(.active) | {id, email}'
+confctl config.yaml -r -q '.services | keys'
+
 # Stdin
 cat config.json | confctl -r 20
 curl -s "$URL" | confctl 0.id
+curl -s "$URL" | confctl -q '.[0].login'
 ```
 
 Formats auto-detect from extension/content; override with `--format json|yaml|toml|env`.
+Prefer dotted path for one key; use `-q` for iterate/filter/construct.
 
 ## 4. What redaction catches
 

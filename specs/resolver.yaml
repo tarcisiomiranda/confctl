@@ -1,7 +1,7 @@
 domain: resolver
 summary: "Dotted-path navigation over parsed values, including numeric array indices and descriptive error messages."
 last_invoked_by: main
-last_updated: "2026-04-23"
+last_updated: "2026-08-10"
 
 modules:
   - path: src/main.rs
@@ -60,4 +60,6 @@ related:
   - domain: output
     why: "Its &Value result is handed straight to format_value / format_value_colored."
   - domain: cli
-    why: "Only invoked when the user supplies a dotted path; otherwise main() dumps the whole Value."
+    why: "Only invoked when the user supplies a dotted path (and not -q); otherwise main() dumps the whole Value."
+  - domain: query
+    why: "Expressions live in query (-q). This domain stays path-only dotted syntax; no filter language here."

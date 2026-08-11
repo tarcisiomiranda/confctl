@@ -420,3 +420,255 @@ fn test_github_users_api_query() {
         other => panic!("expected 0.login to be a string, got: {other}"),
     }
 }
+
+#[test]
+fn test_query_run_clubs_names() {
+    let data = parse_file("testdata/config.json", Some(Format::Json)).unwrap();
+    let results = query::run(".clubs[] | .name", &data).unwrap();
+    assert!(results.len() >= 3);
+    assert_eq!(results[0], json!("Club de Regatas Vasco da Gama"));
+}
+
+#[test]
+fn test_query_select_and_object() {
+    let data = json!({
+        "users": [
+            {"id": 1, "name": "a", "active": true},
+            {"id": 2, "name": "b", "active": false},
+            {"id": 3, "name": "c", "active": true}
+        ]
+    });
+    let results = query::run(".users[] | select(.active) | {id, name}", &data).unwrap();
+    assert_eq!(results.len(), 2);
+    assert_eq!(results[0], json!({"id": 1, "name": "a"}));
+    assert_eq!(results[1], json!({"id": 3, "name": "c"}));
+}
+
+#[test]
+fn test_legacy_path_still_works_alongside_query_module() {
+    let data = json!({"club": {"name": "Vasco"}});
+    let result = resolve_path(&data, "club.name").unwrap();
+    assert_eq!(result, &json!("Vasco"));
+    let q = query::run(".club.name", &data).unwrap();
+    assert_eq!(q, vec![json!("Vasco")]);
+}
+
+/// Resolve the built confctl binary for CLI-level -q tests.
+fn confctl_bin() -> Command {
+    let bin = option_env!("CARGO_BIN_EXE_confctl").unwrap_or("confctl");
+    let mut cmd = Command::new(bin);
+    // Run from crate root so testdata/ paths resolve.
+    cmd.current_dir(env!("CARGO_MANIFEST_DIR"));
+    cmd.env_remove("CONFCTL_VAULT_PASSWORD");
+    cmd
+}
+
+#[test]
+fn cli_query_stream_one_name_per_line() {
+    let output = confctl_bin()
+        .args(["testdata/config.json", "-q", ".clubs[] | .name"])
+        .output()
+        .expect("run confctl");
+    assert!(
+        output.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let lines: Vec<_> = stdout.lines().collect();
+    assert_eq!(lines.len(), 4, "stdout={stdout}");
+    assert_eq!(lines[0], "Club de Regatas Vasco da Gama");
+    assert_eq!(lines[1], "Arsenal FC");
+}
+
+#[test]
+fn cli_query_select_spain_compact_objects() {
+    let output = confctl_bin()
+        .args([
+            "testdata/config.json",
+            "-c",
+            "-q",
+            r#".clubs[] | select(.country == "Spain") | {name, country}"#,
+        ])
+        .output()
+        .expect("run confctl");
+    assert!(
+        output.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let lines: Vec<_> = stdout.lines().filter(|l| !l.is_empty()).collect();
+    assert_eq!(lines.len(), 2, "stdout={stdout}");
+    for line in &lines {
+        let v: serde_json::Value = serde_json::from_str(line).expect(line);
+        assert_eq!(v["country"], "Spain");
+        assert!(v.get("name").is_some());
+    }
+}
+
+#[test]
+fn cli_query_and_path_together_fails() {
+    let output = confctl_bin()
+        .args([
+            "testdata/config.json",
+            "clubs.0.name",
+            "-q",
+            ".clubs[0].name",
+        ])
+        .output()
+        .expect("run confctl");
+    assert!(
+        !output.status.success(),
+        "expected failure when mixing path and -q"
+    );
+    let err = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stderr),
+        String::from_utf8_lossy(&output.stdout)
+    );
+    assert!(
+        err.contains("either -q") || err.contains("not both"),
+        "err={err}"
+    );
+}
+
+#[test]
+fn cli_legacy_path_unaffected() {
+    let output = confctl_bin()
+        .args(["testdata/config.json", "clubs.0.players.1.name"])
+        .output()
+        .expect("run confctl");
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "Juninho Pernambucano"
+    );
+}
+
+#[test]
+fn cli_query_matches_legacy_path_leaf() {
+    let path_out = confctl_bin()
+        .args(["testdata/config.json", "clubs.2.titles.champions_league"])
+        .output()
+        .unwrap();
+    let q_out = confctl_bin()
+        .args([
+            "testdata/config.json",
+            "-q",
+            ".clubs[2].titles.champions_league",
+        ])
+        .output()
+        .unwrap();
+    assert!(path_out.status.success());
+    assert!(q_out.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&path_out.stdout).trim(),
+        String::from_utf8_lossy(&q_out.stdout).trim()
+    );
+    assert_eq!(String::from_utf8_lossy(&path_out.stdout).trim(), "15");
+}
+
+#[test]
+fn cli_query_bad_syntax_exits_nonzero() {
+    let output = confctl_bin()
+        .args(["testdata/config.json", "-q", "if .x then 1"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+}
+
+#[test]
+fn cli_query_missing_key_exits_nonzero() {
+    let output = confctl_bin()
+        .args(["testdata/config.json", "-q", ".does_not_exist"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+}
+
+#[test]
+fn cli_query_empty_stream_succeeds_with_no_stdout() {
+    let output = confctl_bin()
+        .args(["testdata/config.json", "-q", ".clubs[] | select(false)"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).is_empty());
+}
+
+#[test]
+fn cli_query_works_on_yaml_and_toml() {
+    for file in ["testdata/config.yaml", "testdata/config.toml"] {
+        let output = confctl_bin()
+            .args([file, "-q", ".clubs | length"])
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{file}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "4");
+    }
+}
+
+#[test]
+fn cli_query_stdin_pipe() {
+    let body = r#"[{"login":"alice"},{"login":"bob"}]"#;
+    let mut child = confctl_bin()
+        .args(["-q", ".[] | .login"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    use std::io::Write;
+    child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(body.as_bytes())
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let lines: Vec<_> = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::to_string)
+        .collect();
+    assert_eq!(lines, vec!["alice".to_string(), "bob".to_string()]);
+}
+
+#[test]
+fn cli_query_redact_before_expression() {
+    // Build a tiny env-like JSON with a secret; -r then -q must not leak secret.
+    let dir = tempfile_dir();
+    let path = dir.join("sec.json");
+    std::fs::write(
+        &path,
+        r#"{"API_KEY":"sk-secret-value-12345","items":[{"n":1},{"n":2}]}"#,
+    )
+    .unwrap();
+    let output = confctl_bin()
+        .args([path.to_str().unwrap(), "-r", "-q", ".API_KEY"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let out = String::from_utf8_lossy(&output.stdout);
+    assert!(out.contains("redacted"), "out={out}");
+    assert!(!out.contains("sk-secret-value-12345"), "out={out}");
+}
+
+fn tempfile_dir() -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("confctl-query-test-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&dir);
+    dir
+}

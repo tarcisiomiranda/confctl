@@ -1,6 +1,6 @@
 domain: cli
 summary: "Argument parsing, stdin/tty heuristics, and the main() dispatch that wires every other domain together."
-last_updated: "2026-07-30"
+last_updated: "2026-08-10"
 
 modules:
   - path: src/main.rs
@@ -61,6 +61,10 @@ cli_surface:
   - flag: "--copy"
     path: src/main.rs#L42-L45
     role: "Also pipe the final output into the system clipboard via wl-copy / xclip / xsel / pbcopy (first available). Confirmation on stderr."
+  - flag: "--query"
+    short: "-q"
+    path: src/main.rs
+    role: "jq-subset expression (opt-in). Conflicts with positional dotted path. See specs/query.yaml."
 
 behaviours:
   - name: stdin-first
@@ -93,3 +97,5 @@ related:
     why: "main() chooses between format_value / format_value_colored / colorize_json depending on TTY."
   - domain: transform
     why: "--encode and --decode flags wire into apply_base64_transform after resolution."
+  - domain: query
+    why: "-q/--query dispatches to query::run instead of resolve_path."
