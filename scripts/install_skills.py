@@ -9,7 +9,7 @@ Examples:
   python scripts/install_skills.py --list       # only show what was detected
   python scripts/install_skills.py --dry-run    # show actions without writing
   python scripts/install_skills.py --all        # install for every known tool (ignore detection)
-  python scripts/install_skills.py --only grok  # Grok / xAI only
+  python scripts/install_skills.py --only kiro --only hermes
   python scripts/install_skills.py --global-only
   python scripts/install_skills.py --project-only
 """
@@ -44,8 +44,8 @@ class AgentTool:
     global_skill_dir: str | None = None
     # Extra global skill dirs (compat paths).
     extra_global_skill_dirs: tuple[str, ...] = ()
-    # Extra project skill dirs for this tool.
     extra_project_skill_dirs: tuple[str, ...] = ()
+    project_markers: tuple[str, ...] = ()
 
 
 # Known agents that understand Agent Skills (SKILL.md) or equivalent layouts.
@@ -124,6 +124,32 @@ TOOLS: tuple[AgentTool, ...] = (
         project_skill_dir=".continue/skills/confctl",
         global_skill_dir=".continue/skills/confctl",
     ),
+    AgentTool(
+        id="kiro",
+        name="Kiro",
+        home_markers=(".kiro",),
+        binaries=("kiro",),
+        project_skill_dir=".kiro/skills/confctl",
+        global_skill_dir=".kiro/skills/confctl",
+    ),
+    AgentTool(
+        id="hermes",
+        name="Hermes Agent",
+        home_markers=(".hermes",),
+        binaries=("hermes",),
+        project_skill_dir=".hermes/skills/confctl",
+        global_skill_dir=".hermes/skills/confctl",
+    ),
+    AgentTool(
+        id="bmad",
+        name="BMAD",
+        project_markers=("_bmad",),
+        project_skill_dir="_bmad/custom/skills/confctl",
+        extra_project_skill_dirs=(
+            ".claude/skills/confctl",
+            ".agents/skills/confctl",
+        ),
+    ),
 )
 
 
@@ -143,7 +169,9 @@ def which(name: str) -> Path | None:
     return Path(path) if path else None
 
 
-def detect_tool(tool: AgentTool, home: Path) -> Detection:
+def detect_tool(
+    tool: AgentTool, home: Path, root: Path | None = None
+) -> Detection:
     reasons: list[str] = []
     for rel in tool.home_markers:
         marker = home / rel
@@ -153,11 +181,26 @@ def detect_tool(tool: AgentTool, home: Path) -> Detection:
         found = which(binary)
         if found is not None:
             reasons.append(f"binary {found}")
+    if root is not None:
+        for rel in tool.project_markers:
+            marker = root / rel
+            if marker.exists():
+                reasons.append(f"found {marker}")
     return Detection(tool=tool, present=bool(reasons), reasons=reasons)
 
 
-def detect_all(home: Path, tools: tuple[AgentTool, ...] = TOOLS) -> list[Detection]:
-    return [detect_tool(t, home) for t in tools]
+def detect_all(
+    home: Path,
+    tools: tuple[AgentTool, ...] = TOOLS,
+    root: Path | None = None,
+) -> list[Detection]:
+    return [detect_tool(t, home, root) for t in tools]
+
+
+def _project_marker_ok(tool: AgentTool, root: Path) -> bool:
+    if not tool.project_markers:
+        return True
+    return any((root / rel).exists() for rel in tool.project_markers)
 
 
 def skill_source(root: Path) -> Path:
@@ -174,7 +217,7 @@ def install_targets(
 ) -> list[Path]:
     """Return destination directories that should contain SKILL.md."""
     dirs: list[Path] = []
-    if project and tool.project_skill_dir:
+    if project and tool.project_skill_dir and _project_marker_ok(tool, root):
         dirs.append(root / tool.project_skill_dir)
         for rel in tool.extra_project_skill_dirs:
             dirs.append(root / rel)
@@ -207,6 +250,28 @@ def copy_skill(src: Path, dest_dir: Path, *, dry_run: bool) -> Path:
     dest_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(src, dest)
     return dest
+
+
+def append_bmad_manifest(root: Path, *, dry_run: bool) -> Path | None:
+    manifest = root / "_bmad" / "_config" / "skill-manifest.csv"
+    if not manifest.is_file():
+        return None
+    rel = "_bmad/custom/skills/confctl/SKILL.md"
+    text = manifest.read_text(encoding="utf-8")
+    if SKILL_NAME in text or f'"{SKILL_NAME}"' in text:
+        return manifest
+    row = (
+        f'"{SKILL_NAME}","{SKILL_NAME}",'
+        f'"Safe config/.env queries with redaction (confctl -r)","custom",'
+        f'"{rel}"'
+    )
+    if dry_run:
+        return manifest
+    with manifest.open("a", encoding="utf-8") as fh:
+        if not text.endswith("\n"):
+            fh.write("\n")
+        fh.write(row + "\n")
+    return manifest
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -297,7 +362,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: missing canonical skill at {src}", file=sys.stderr)
         return 1
 
-    detections = detect_all(home)
+    detections = detect_all(home, root=root)
     present = [d for d in detections if d.present]
     missing = [d for d in detections if not d.present]
 
@@ -356,6 +421,11 @@ def main(argv: list[str] | None = None) -> int:
             prefix = "would install" if args.dry_run else "installed"
             print(f"  {prefix} {dest}")
             installed.append(dest)
+        if tool.id == "bmad":
+            manifest = append_bmad_manifest(root, dry_run=args.dry_run)
+            if manifest is not None:
+                action = "would update" if args.dry_run else "updated"
+                print(f"  {action} {manifest}")
 
     print()
     if args.dry_run:

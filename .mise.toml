@@ -110,7 +110,7 @@ description = "Lista AI agents detectados nesta máquina"
 run = "python scripts/install_skills.py --list"
 
 [tasks."skills:install"]
-description = "Detecta AI agents e instala confctl SKILL.md (inclui Grok)"
+description = "Detecta AI agents e instala confctl SKILL.md"
 run = "python scripts/install_skills.py"
 
 [tasks."skills:install:all"]

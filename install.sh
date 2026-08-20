@@ -100,6 +100,10 @@ install_agent_skills() {
 		".continue"
 	install_skill_for_agent "$skill_path" ".codeium/windsurf/skills/confctl" \
 		".codeium/windsurf" ".windsurf" "bin:windsurf"
+	install_skill_for_agent "$skill_path" ".kiro/skills/confctl" \
+		".kiro" "bin:kiro"
+	install_skill_for_agent "$skill_path" ".hermes/skills/confctl" \
+		".hermes" "bin:hermes"
 
 	printf 'Agent skill install finished.\n'
 }

@@ -203,5 +203,164 @@ class InstallTests(unittest.TestCase):
                 self.assertEqual(rc_found, 0)
 
 
+class KiroHermesBmadTests(unittest.TestCase):
+    def _tool(self, tool_id: str) -> mod.AgentTool:
+        for t in mod.TOOLS:
+            if t.id == tool_id:
+                return t
+        self.fail(f"missing tool {tool_id}")
+
+    def _skill_repo(self, base: Path) -> tuple[Path, Path]:
+        root = base / "repo"
+        home = base / "home"
+        root.mkdir()
+        home.mkdir()
+        skill_dir = root / "skills" / "confctl"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: confctl\ndescription: test\n---\n# ok\n", encoding="utf-8"
+        )
+        return root, home
+
+    def test_kiro_hermes_bmad_registered(self) -> None:
+        ids = [t.id for t in mod.TOOLS]
+        for expected in ("kiro", "hermes", "bmad"):
+            self.assertIn(expected, ids)
+
+    def test_detects_kiro_home(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            (home / ".kiro").mkdir()
+            d = mod.detect_tool(self._tool("kiro"), home)
+            self.assertTrue(d.present)
+
+    def test_detects_hermes_home(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            (home / ".hermes").mkdir()
+            d = mod.detect_tool(self._tool("hermes"), home)
+            self.assertTrue(d.present)
+
+    def test_detects_bmad_when_project_has_bmad(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            home = base / "home"
+            root = base / "repo"
+            home.mkdir()
+            root.mkdir()
+            (root / "_bmad").mkdir()
+            d = mod.detect_tool(self._tool("bmad"), home, root=root)
+            self.assertTrue(d.present)
+
+    def test_bmad_absent_without_project_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            d = mod.detect_tool(self._tool("bmad"), home, root=home)
+            self.assertFalse(d.present)
+
+    def test_kiro_install_targets(self) -> None:
+        tool = self._tool("kiro")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "repo"
+            home = Path(tmp) / "home"
+            root.mkdir()
+            home.mkdir()
+            targets = mod.install_targets(
+                tool, root=root, home=home, project=True, global_=True
+            )
+            self.assertIn(root / ".kiro" / "skills" / "confctl", targets)
+            self.assertIn(home / ".kiro" / "skills" / "confctl", targets)
+
+    def test_hermes_install_targets(self) -> None:
+        tool = self._tool("hermes")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "repo"
+            home = Path(tmp) / "home"
+            root.mkdir()
+            home.mkdir()
+            targets = mod.install_targets(
+                tool, root=root, home=home, project=True, global_=True
+            )
+            self.assertIn(root / ".hermes" / "skills" / "confctl", targets)
+            self.assertIn(home / ".hermes" / "skills" / "confctl", targets)
+
+    def test_bmad_targets_skipped_without_marker(self) -> None:
+        tool = self._tool("bmad")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "repo"
+            home = Path(tmp) / "home"
+            root.mkdir()
+            home.mkdir()
+            targets = mod.install_targets(
+                tool, root=root, home=home, project=True, global_=True
+            )
+            self.assertEqual(targets, [])
+
+    def test_bmad_targets_when_marker_exists(self) -> None:
+        tool = self._tool("bmad")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "repo"
+            home = Path(tmp) / "home"
+            root.mkdir()
+            home.mkdir()
+            (root / "_bmad").mkdir()
+            targets = mod.install_targets(
+                tool, root=root, home=home, project=True, global_=True
+            )
+            self.assertIn(root / "_bmad" / "custom" / "skills" / "confctl", targets)
+            self.assertIn(root / ".claude" / "skills" / "confctl", targets)
+            self.assertIn(root / ".agents" / "skills" / "confctl", targets)
+            self.assertTrue(all(not str(p).startswith(str(home)) for p in targets))
+
+    def test_main_installs_kiro_global(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, home = self._skill_repo(Path(tmp))
+            (home / ".kiro").mkdir()
+            with mock.patch.object(mod, "which", return_value=None):
+                rc = mod.main(
+                    [
+                        "--root",
+                        str(root),
+                        "--home",
+                        str(home),
+                        "--global-only",
+                        "--only",
+                        "kiro",
+                    ]
+                )
+            self.assertEqual(rc, 0)
+            dest = home / ".kiro" / "skills" / "confctl" / "SKILL.md"
+            self.assertTrue(dest.is_file())
+            self.assertIn("confctl", dest.read_text(encoding="utf-8"))
+
+    def test_main_installs_bmad_and_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, home = self._skill_repo(Path(tmp))
+            config = root / "_bmad" / "_config"
+            config.mkdir(parents=True)
+            manifest = config / "skill-manifest.csv"
+            manifest.write_text(
+                "canonicalId,name,description,module,path\n", encoding="utf-8"
+            )
+            with mock.patch.object(mod, "which", return_value=None):
+                rc = mod.main(
+                    [
+                        "--root",
+                        str(root),
+                        "--home",
+                        str(home),
+                        "--project-only",
+                        "--only",
+                        "bmad",
+                    ]
+                )
+            self.assertEqual(rc, 0)
+            dest = root / "_bmad" / "custom" / "skills" / "confctl" / "SKILL.md"
+            self.assertTrue(dest.is_file())
+            text = manifest.read_text(encoding="utf-8")
+            self.assertIn("confctl", text)
+            self.assertIn("_bmad/custom/skills/confctl/SKILL.md", text)
+
+
 if __name__ == "__main__":
     unittest.main()

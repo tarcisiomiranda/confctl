@@ -1,6 +1,6 @@
 domain: build
 summary: "Build targets, mise tasks, Dockerfile, install.sh, and the GitHub Actions CI/release pipelines."
-last_updated: "2026-08-10"  # v0.0.8 query -q
+last_updated: "2026-08-20"
 
 version:
   current: "0.0.8"
@@ -89,19 +89,19 @@ docker:
 
 install_script:
   - path: install.sh
-    role: "Detects OS/arch (linux/amd64, darwin/arm64, darwin/amd64), downloads the matching binary from GitHub Releases, installs to /usr/local/bin/confctl. Optional CONFCTL_INSTALL_SKILLS=1 installs skills/confctl/SKILL.md into detected agent homes (including ~/.grok/skills/confctl)."
+    role: "Detects OS/arch (linux/amd64, darwin/arm64, darwin/amd64), downloads the matching binary from GitHub Releases, installs to /usr/local/bin/confctl. Optional CONFCTL_INSTALL_SKILLS=1 installs skills/confctl/SKILL.md into detected agent homes (including ~/.grok, ~/.kiro, ~/.hermes)."
 
 agent_skills:
   - path: skills/confctl/SKILL.md
-    role: "Canonical Agent Skills package — teaches confctl queries and -r / -r 10 / -r 20 redaction for Grok and other agents."
+    role: "Canonical Agent Skills package — teaches confctl queries and -r / -r 10 / -r 20 redaction."
   - path: skills/README.md
     role: "Install docs for multi-agent skill paths."
   - path: scripts/install_skills.py
-    role: "Detects AI tools and copies SKILL.md to project/global skill dirs (Grok: ~/.grok/skills/confctl)."
+    role: "Detects AI tools and copies SKILL.md to project/global skill dirs (Claude, Codex, Cursor, Grok, Kiro, Hermes, BMAD, …)."
   - path: scripts/install-skills.sh
     role: "Thin sh wrapper around install_skills.py."
   - path: scripts/test_install_skills.py
-    role: "Unit tests for the skill installer (includes Grok path)."
+    role: "Unit tests for the skill installer (includes Grok, Kiro, Hermes, BMAD)."
 
 artefacts:
   - name: confctl-linux-amd64

@@ -28,7 +28,7 @@ Or install a specific version:
 curl -fsSL https://raw.githubusercontent.com/tarcisiomiranda/confctl/main/install.sh | bash -s v0.0.3
 ```
 
-**Agent skills are off by default.** To also detect AI tools on the machine (Claude Code, Codex, OpenCode, Cursor, **Grok**, …) and install the confctl `SKILL.md` (teaches safe `-r` / `-r 10` / `-r 20` usage):
+**Agent skills are off by default.** To also detect AI tools on the machine (Claude Code, Codex, OpenCode, Cursor, Grok, Kiro, Hermes, …) and install the confctl `SKILL.md` (teaches safe `-r` / `-r 10` / `-r 20` usage):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/tarcisiomiranda/confctl/main/install.sh \
@@ -313,7 +313,7 @@ features:
 
 ---
 
-## Agent skills (Claude Code, Codex, OpenCode, Cursor, Grok, …)
+## Agent skills (Claude Code, Codex, OpenCode, Cursor, Grok, Kiro, Hermes, BMAD, …)
 
 confctl ships an [Agent Skills](https://agentskills.io/specification)-compatible skill so coding agents query configs with redaction instead of dumping full `.env` files into context.
 
@@ -334,9 +334,9 @@ mise run skills:install
 
 # Or call the script directly
 python scripts/install_skills.py --list
-python scripts/install_skills.py              # detected tools only (includes Grok when ~/.grok or grok is present)
+python scripts/install_skills.py              # detected tools only
 python scripts/install_skills.py --all        # every known path
-python scripts/install_skills.py --only grok  # Grok only
+python scripts/install_skills.py --only kiro --only hermes
 python scripts/install_skills.py --dry-run
 ```
 
@@ -346,7 +346,10 @@ python scripts/install_skills.py --dry-run
 | OpenAI Codex | `.codex/skills/confctl/` | `~/.codex/skills/confctl/` |
 | OpenCode | `.opencode/skills/confctl/` | `~/.config/opencode/skills/confctl/` |
 | Cursor | `.cursor/skills/confctl/` | `~/.cursor/skills/confctl/` |
-| **Grok / xAI** | `.grok/skills/confctl/` | `~/.grok/skills/confctl/` |
+| Grok / xAI | `.grok/skills/confctl/` | `~/.grok/skills/confctl/` |
+| Kiro | `.kiro/skills/confctl/` | `~/.kiro/skills/confctl/` |
+| Hermes Agent | `.hermes/skills/confctl/` | `~/.hermes/skills/confctl/` |
+| BMAD | `_bmad/custom/skills/confctl/` (if `_bmad/` exists) | — |
 | Generic | `.agents/skills/confctl/` | `~/.agents/skills/confctl/` |
 
 See `skills/README.md` for details.

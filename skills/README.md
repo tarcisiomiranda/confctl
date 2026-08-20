@@ -15,7 +15,7 @@ confctl .env -r 10     # 10% start + end (identify without full secret)
 confctl .env -r 20     # 20% start + end
 ```
 
-so they can still debug hosts, keys, and structure safely — including on **Grok**.
+so they can still debug hosts, keys, and structure safely.
 
 ## Install with the confctl binary installer (optional)
 
@@ -44,19 +44,19 @@ mise run skills:list
 mise run skills:install
 # or: python scripts/install_skills.py
 
-# Force every known tool path (includes Grok)
+# Force every known tool path
 mise run skills:install:all
 
 # Scope / dry-run
 python scripts/install_skills.py --dry-run
 python scripts/install_skills.py --project-only
 python scripts/install_skills.py --global-only
-python scripts/install_skills.py --only grok --only claude
+python scripts/install_skills.py --only kiro --only hermes
 ```
 
 The installer (`scripts/install_skills.py`) looks for config dirs under `$HOME`
-(e.g. `~/.claude`, `~/.codex`, `~/.grok`) and binaries on `PATH`, then copies
-`skills/confctl/SKILL.md` only where those tools live.
+(e.g. `~/.claude`, `~/.codex`, `~/.grok`, `~/.kiro`, `~/.hermes`) and binaries
+on `PATH`, then copies `skills/confctl/SKILL.md` only where those tools live.
 
 `./scripts/install-skills.sh` is a thin wrapper around the same Python script.
 
@@ -69,6 +69,9 @@ The installer (`scripts/install_skills.py`) looks for config dirs under `$HOME`
 | **OpenCode** | `.opencode/skills/confctl/SKILL.md` | `~/.config/opencode/skills/confctl/SKILL.md` |
 | **Cursor** | `.cursor/skills/confctl/SKILL.md` | `~/.cursor/skills/confctl/SKILL.md` |
 | **Grok / xAI** | `.grok/skills/confctl/SKILL.md` | `~/.grok/skills/confctl/SKILL.md` |
+| **Kiro** | `.kiro/skills/confctl/SKILL.md` | `~/.kiro/skills/confctl/SKILL.md` |
+| **Hermes Agent** | `.hermes/skills/confctl/SKILL.md` | `~/.hermes/skills/confctl/SKILL.md` |
+| **BMAD** | `_bmad/custom/skills/confctl/SKILL.md` (only if `_bmad/` exists) | — |
 | **Generic / multi-agent** | `.agents/skills/confctl/SKILL.md` | `~/.agents/skills/confctl/SKILL.md` |
 
 ## When agents should load this skill
